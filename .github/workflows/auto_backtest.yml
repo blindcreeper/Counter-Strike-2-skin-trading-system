@@ -1,10 +1,10 @@
-﻿name:  CS2 自动量化回测
+name: CS2 自动量化回测
 
 on:
   # 每天22点执行（北京时间）
   schedule:
     - cron: "0 14 * * *"  # UTC 14:00 = 北京时间 22:00
-  
+
   # 允许手动触发
   workflow_dispatch:
     inputs:
@@ -21,6 +21,7 @@ on:
         description: "初始虚拟资金"
         required: false
         default: "10000"
+        type: string
 
 jobs:
   backtest:
@@ -30,40 +31,41 @@ jobs:
     env:
       PYTHONUNBUFFERED: 1
       PYTHONDONTWRITEBYTECODE: 1
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # 解决Node.js 20弃用警告
     
     steps:
       # 1. 检出代码
-      - name:  检出代码
+      - name: 检出代码
         uses: actions/checkout@v4
       
       # 2. 设置Python环境
-      - name:  配置Python 3.11
+      - name: 配置Python 3.11
         uses: actions/setup-python@v4
         with:
           python-version: "3.11"
           cache: "pip"
       
       # 3. 安装依赖
-      - name:  安装依赖
+      - name: 安装依赖
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       
       # 4. 运行回测
-      - name:  执行回测
+      - name: 执行回测
         id: backtest
         env:
           DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
         run: |
           python scripts/run_backtest.py \
-            --hours-back ${{ inputs.hours_back || "72" }} \
-            --initial-balance ${{ inputs.initial_balance || "10000" }} \
+            --hours-back ${{ inputs.hours_back || 72 }} \
+            --initial-balance ${{ inputs.initial_balance || 10000 }} \
             --enable-charts \
             --enable-dingtalk \
             --dingtalk-webhook "${{ secrets.DINGTALK_WEBHOOK }}"
       
       # 5. 上传回测报告（成功时）
-      - name:  上传回测报告
+      - name: 上传回测报告
         if: success()
         uses: actions/upload-artifact@v4
         with:
@@ -93,4 +95,4 @@ jobs:
       - name: ✅ 回测成功标记
         run: |
           echo "✅ 回测流程成功完成"
-          echo "时间: $(date -u +%Y-%m-%d\ %H:%M:%S\ UTC)"
+          echo "时间: $(date -u +%Y-%m-%d %H:%M:%S UTC)"
