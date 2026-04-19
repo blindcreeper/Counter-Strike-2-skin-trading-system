@@ -1,0 +1,19 @@
+{
+  "api": {
+    "sdt_key": "aa1f20fe10ca45248d260201df963772",
+    "csqaq_token": "SBWSE1M7Q6P8E65703O8O9Q7"
+  },
+  "scheduler": {
+    "mode": "daily",
+    "time": "22:00",
+    "interval_hours": 6
+  },
+  "backtest": {
+    "hours_back": 72,
+    "initial_balance": 10000,
+    "enable_charts": true
+  },
+  "notification": {
+    "dingtalk_webhook": "https://oapi.dingtalk.com/robot/send?access_token=99fcd1e51e476655d047eada2738de4cdd9aa16cb2eb5b6a905fa6a1d4c0aa3b"
+  }
+}

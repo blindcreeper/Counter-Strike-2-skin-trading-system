@@ -1,0 +1,105 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-workspace
+*.sublime-project
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Logs
+*.log
+logs/
+*.debug
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+*.temp
+
+# System files
+.DS_Store
+Thumbs.db
+*.bak
+*.backup
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Sensitive data
+config/config_secret.py
+config/.env
+*.key
+*.pem
+*.cert
+
+# Large data files (optional - uncomment if needed)
+# data/steam_items_database.json
+# data/data.txt
+# databases/*.db
+
+# Backups
+backups/
+*.sql
+*.dump
+
+# IDE specific
+.vscode/settings.json
+.idea/workspace.xml
+
+# OS
+.DS_Store
+Thumbs.db
+.AppleDouble
+.LSOverride
+
+# Node modules (if using frontend)
+node_modules/
+package-lock.json
+
+# Docker
+.dockerignore
