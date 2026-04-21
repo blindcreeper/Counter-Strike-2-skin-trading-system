@@ -1,0 +1,41 @@
+{
+  "timestamp": "2026-04-07T16:50:08.459094",
+  "metrics": {
+    "initial_balance": 10000.0,
+    "final_balance": 10112.199499999999,
+    "total_profit": 56.09975,
+    "total_return": 0.011219949999999881,
+    "total_trades": 2,
+    "winning_trades": 2,
+    "losing_trades": 0,
+    "win_rate": 1.0,
+    "avg_profit": 28.049875,
+    "max_profit_trade": 44.02675000000001,
+    "max_loss_trade": 12.07299999999999,
+    "avg_return": 0.4311787174396105,
+    "best_return": 0.71125605815832,
+    "worst_return": 0.151101376720901,
+    "max_drawdown": 0.0,
+    "sharpe_ratio": 24.438785102177853
+  },
+  "trades": [
+    {
+      "name": "StatTrak™ AWP | Capillary (Factory New)",
+      "buy_price": 79.9,
+      "sell_price": 96.38,
+      "net_profit": 12.07299999999999,
+      "profit_rate": 0.151101376720901,
+      "timestamp": "2026-04-06T08:52:22",
+      "account_balance": 10012.073
+    },
+    {
+      "name": "Souvenir MAC-10 | Candy Apple (Field-Tested)",
+      "buy_price": 61.9,
+      "sell_price": 110.23,
+      "net_profit": 44.02675000000001,
+      "profit_rate": 0.71125605815832,
+      "timestamp": "2026-04-07T16:47:32",
+      "account_balance": 10056.09975
+    }
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "timestamp": "2026-04-08T16:03:26.399677",
+  "metrics": {
+    "initial_balance": 10000.0,
+    "final_balance": 10278.074999999997,
+    "total_profit": 139.0375,
+    "total_return": 0.027807499999999707,
+    "total_trades": 7,
+    "winning_trades": 7,
+    "losing_trades": 0,
+    "win_rate": 1.0,
+    "avg_profit": 19.8625,
+    "max_profit_trade": 44.02675000000001,
+    "max_loss_trade": 9.126499999999997,
+    "avg_return": 0.3000982570599862,
+    "best_return": 0.71125605815832,
+    "worst_return": 0.08831526998258173,
+    "max_drawdown": 0.0,
+    "sharpe_ratio": 18.7452208417958
+  },
+  "trades": [
+    {
+      "name": "StatTrak™ AWP | Capillary (Factory New)",
+      "buy_price": 79.9,
+      "sell_price": 96.38,
+      "net_profit": 12.07299999999999,
+      "profit_rate": 0.151101376720901,
+      "timestamp": "2026-04-06 08:52:22",
+      "account_balance": 10012.073
+    },
+    {
+      "name": "Souvenir MAC-10 | Candy Apple (Field-Tested)",
+      "buy_price": 61.9,
+      "sell_price": 110.23,
+      "net_profit": 44.02675000000001,
+      "profit_rate": 0.71125605815832,
+      "timestamp": "2026-04-07 16:47:32",
+      "account_balance": 10056.09975
+    },
+    {
+      "name": "StatTrak™ AWP | Capillary (Factory New)",
+      "buy_price": 79.9,
+      "sell_price": 96.17,
+      "net_profit": 11.868249999999996,
+      "profit_rate": 0.1485387984981226,
+      "timestamp": "2026-04-07 16:50:43",
+      "account_balance": 10067.968
+    },
+    {
+      "name": "StatTrak™ MAC-10 | Ultraviolet (Minimal Wear)",
+      "buy_price": 60.0,
+      "sell_price": 72.68,
+      "net_profit": 9.363000000000007,
+      "profit_rate": 0.1560500000000001,
+      "timestamp": "2026-04-07 16:56:02",
+      "account_balance": 10077.331
+    },
+    {
+      "name": "M4A1-S | Briefing (Minimal Wear)",
+      "buy_price": 103.34,
+      "sell_price": 118.0,
+      "net_profit": 9.126499999999997,
+      "profit_rate": 0.08831526998258173,
+      "timestamp": "2026-04-07 19:54:34",
+      "account_balance": 10086.457499999999
+    },
+    {
+      "name": "Souvenir MAC-10 | Candy Apple (Field-Tested)",
+      "buy_price": 62.69,
+      "sell_price": 110.23,
+      "net_profit": 43.217000000000006,
+      "profit_rate": 0.6893762960599777,
+      "timestamp": "2026-04-07 20:00:55",
+      "account_balance": 10129.674499999997
+    },
+    {
+      "name": "StatTrak™ MAC-10 | Ultraviolet (Minimal Wear)",
+      "buy_price": 60.0,
+      "sell_price": 72.68,
+      "net_profit": 9.363000000000007,
+      "profit_rate": 0.1560500000000001,
+      "timestamp": "2026-04-07 20:09:24",
+      "account_balance": 10139.037499999997
+    }
+  ]
+}

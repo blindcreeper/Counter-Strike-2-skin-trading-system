@@ -36,11 +36,11 @@ jobs:
     steps:
       # 1. 检出代码
       - name: 检出代码
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
       
       # 2. 设置Python环境
       - name: 配置Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
           python-version: "3.11"
           cache: "pip"

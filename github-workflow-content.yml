@@ -1,0 +1,45 @@
+﻿name: CS2 Quantitative Backtest
+
+on:
+  schedule:
+    - cron: "0 14 * * *"
+  workflow_dispatch:
+    inputs:
+      hours_back:
+        description: "Hours back"
+        default: "72"
+      initial_balance:
+        description: "Initial balance"
+        default: "10000"
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          
+      - name: Run CS2 backtest
+        run: |
+          python scripts/run_backtest.py
+          
+      - name: Save results
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cs2-backtest-output
+          path: |
+            backtest_logs/
+            backtest_charts/

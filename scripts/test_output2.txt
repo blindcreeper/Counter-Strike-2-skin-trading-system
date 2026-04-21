@@ -1,0 +1,82 @@
+﻿python : D:\Pythonprojectcode\scripts\..\src\backtest_visualizer.py:56: UserWarning: Glyph 165 (\N{YEN SIGN}) missing f
+rom font(s) SimHei.
+所在位置 行:1 字符: 44
++ ... PYTHONIOENCODING='utf-8'; python backtest_quick.py quick 2>&1 | Out-F ...
++                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (D:\Pythonprojec...font(s) SimHei.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  plt.tight_layout()
+D:\Pythonprojectcode\scripts\..\src\backtest_visualizer.py:57: UserWarning: Glyph 165 (\N{YEN SIGN}) missing from font(
+s) SimHei.
+  plt.savefig(filename, dpi=300, bbox_inches='tight')
+D:\Pythonprojectcode\scripts\..\src\backtest_visualizer.py:214: UserWarning: Glyph 165 (\N{YEN SIGN}) missing from font
+(s) SimHei.
+  plt.tight_layout()
+D:\Pythonprojectcode\scripts\..\src\backtest_visualizer.py:219: UserWarning: Glyph 165 (\N{YEN SIGN}) missing from font
+(s) SimHei.
+  plt.savefig(filename, dpi=300, bbox_inches='tight')
+
+======================================================================
+                       馃殌 蹇€熷洖娴嬫ā寮?- 鎵ц72灏忔椂鏈轰細鏁版嵁鍥炴祴                        
+======================================================================
+
+[2026-04-19 22:20:33] [INFO] 馃殌 鍥炴祴寮€濮?| 鍒濆璧勯噾: 楼10000.00 | 鏈轰細鏁? 0
+鈿狅笍  鏆傛棤 72 灏忔椂鍐呯殑鏁版嵁锛屼娇鐢ㄥ叏閮ㄥ巻鍙叉暟鎹繘琛屽洖娴?
+[2026-04-19 22:20:33] [INFO] 馃搳 鍔犺浇浜?7 涓氦鏄撴満浼?
+
+馃殌 寮€濮嬭櫄鎷熶氦鏄撴ā鎷?
+   鍒濆璧勯噾: 楼10000.00
+   妯℃嫙浜ゆ槗鏁? 7
+
+鉁?[  1] StatTrak鈩?AWP | Capi | 涔?  79.90 鈫?鍗?  96.38 | 鍒╂鼎: 15.11% | 璐︽埛:  10012.07
+鉁?[  2] Souvenir MAC-10 | Ca | 涔?  61.90 鈫?鍗? 110.23 | 鍒╂鼎: 71.13% | 璐︽埛:  10056.10
+鉁?[  3] StatTrak鈩?AWP | Capi | 涔?  79.90 鈫?鍗?  96.17 | 鍒╂鼎: 14.85% | 璐︽埛:  10067.97
+鉁?[  4] StatTrak鈩?MAC-10 | U | 涔?  60.00 鈫?鍗?  72.68 | 鍒╂鼎: 15.61% | 璐︽埛:  10077.33
+鉁?[  5] M4A1-S | Briefing (M | 涔? 103.34 鈫?鍗? 118.00 | 鍒╂鼎:  8.83% | 璐︽埛:  10086.46
+鉁?[  6] Souvenir MAC-10 | Ca | 涔?  62.69 鈫?鍗? 110.23 | 鍒╂鼎: 68.94% | 璐︽埛:  10129.67
+鉁?[  7] StatTrak鈩?MAC-10 | U | 涔?  60.00 鈫?鍗?  72.68 | 鍒╂鼎: 15.61% | 璐︽埛:  10139.04
+[2026-04-19 22:20:33] [INFO] 馃捑 鍥炴祴鏁版嵁宸蹭繚瀛?(ID: 11)
+
+======================================================================
+                              馃搳 铏氭嫙鍥炴祴鏈€缁堟姤鍛?                             
+======================================================================
+
+馃捈 璐︽埛鎸囨爣:
+   鍒濆璧勯噾:        楼    10000.00
+   鏈€缁堣祫閲?        楼    10278.07
+   鎬绘敹鐩?          楼      139.04
+   鏀剁泭鐜?                 2.78%
+
+馃搱 浜ゆ槗鎸囨爣:
+   鎬讳氦鏄撴暟:                   7
+   鑾峰埄绗旀暟:                   7
+   浜忔崯绗旀暟:                   0
+   鑳滅巼:                 100.00%
+
+馃挵 鐩堜簭鎸囨爣:
+   骞冲潎鍗曠瑪鍒╂鼎:    楼       19.86
+   鏈€澶у崟绗斿埄娑?    楼       44.03
+   鏈€澶у崟绗斾簭鎹?    楼        9.13
+
+馃搳 鏀剁泭鐜囨寚鏍?
+   骞冲潎鏀剁泭鐜?            30.01%
+   鏈€浣虫敹鐩婄巼:            71.13%
+   鏈€宸敹鐩婄巼:             8.83%
+
+鈿狅笍  椋庨櫓鎸囨爣:
+   鏈€澶у洖鎾?               0.00%
+   澶忔櫘姣旂巼:               18.75
+
+======================================================================
+[2026-04-19 22:20:33] [INFO] 馃搱 姝ｅ湪鐢熸垚鍥捐〃...
+[2026-04-19 22:20:36] [INFO] 鉁?鍥捐〃宸茬敓鎴愬埌 ./backtest_charts
+[2026-04-19 22:20:36] [ERROR] 閽夐拤API閿欒锛堜笉鍙噸璇曪級: DingTalk API閿欒: errcode=310000, errmsg=閿欒鎻忚堪:鍏抽敭璇嶄笉鍖归厤;瑙ｅ喅鏂规:璇疯仈绯荤兢绠＄悊鍛樻煡鐪嬫鏈哄櫒浜虹殑鍏抽敭璇嶏紝骞跺湪鍙戦€佺殑淇℃伅涓寘鍚鍏抽敭璇?
+[2026-04-19 22:20:36] [INFO] 馃搫 鎶ュ憡宸插鍑哄埌 ./backtest_logs\report_20260419_222036.json
+[2026-04-19 22:20:36] [INFO] 
+鉁?鍥炴祴瀹屾垚
+   鎬绘敹鐩? 楼139.04
+   鏀剁泭鐜? 2.78%
+   鑳滅巼: 100.00%
+   鏈€澶у洖鎾? 0.00%
+        

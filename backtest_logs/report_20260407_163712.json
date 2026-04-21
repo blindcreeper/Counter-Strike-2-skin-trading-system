@@ -1,0 +1,28 @@
+{
+  "timestamp": "2026-04-07T16:37:12.921803",
+  "metrics": {
+    "initial_balance": 10000.0,
+    "final_balance": 10024.146,
+    "total_profit": 12.07299999999999,
+    "total_return": 0.002414600000000064,
+    "total_trades": 1,
+    "winning_trades": 1,
+    "losing_trades": 0,
+    "win_rate": 1.0,
+    "avg_profit": 12.07299999999999,
+    "max_profit_trade": 12.07299999999999,
+    "max_loss_trade": 12.07299999999999,
+    "avg_return": 0.151101376720901,
+    "best_return": 0.151101376720901,
+    "worst_return": 0.151101376720901,
+    "max_drawdown": 0.0,
+    "sharpe_ratio": 0.0
+  },
+  "trades": [
+    {
+      "name": "StatTrak™ AWP | Capillary (Factory New)",
+      "buy_price": 79.9,
+      "sell_price": 96.38,
+      "net_profit": 12.07299999999999,
+      "profit_rate": 0.151101376720901,
+      "timestamp": 

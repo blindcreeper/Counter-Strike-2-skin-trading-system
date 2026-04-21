@@ -4,6 +4,7 @@
 
 import os
 import sys
+import argparse
 from datetime import datetime
 
 # 添加src目录到路径
@@ -132,7 +133,27 @@ class CompleteBacktestSystem:
 
 
 def main():
-    """主程序"""
+    """主程序（支持交互式和CLI模式）"""
+    parser = argparse.ArgumentParser(description="CS2回测系统")
+    parser.add_argument("--hours-back", type=int, default=None, help="回溯小时数")
+    parser.add_argument("--initial-balance", type=float, default=None, help="初始资金")
+    parser.add_argument("--enable-charts", action="store_true", help="启用图表输出")
+    parser.add_argument("--enable-dingtalk", action="store_true", help="启用钉钉通知")
+    parser.add_argument("--dingtalk-webhook", type=str, default=None, help="钉钉Webhook URL")
+    args = parser.parse_args()
+
+    # CI/自动化模式：只要传入核心参数之一，就执行单次回测并退出
+    if args.hours_back is not None or args.initial_balance is not None:
+        system = CompleteBacktestSystem()
+        success = system.run_backtest(
+            hours_back=args.hours_back if args.hours_back is not None else 72,
+            initial_balance=args.initial_balance if args.initial_balance is not None else 10000,
+            enable_charts=args.enable_charts,
+            enable_dingtalk=args.enable_dingtalk,
+            dingtalk_webhook=args.dingtalk_webhook
+        )
+        sys.exit(0 if success else 1)
+
     print("""
 ╔════════════════════════════════════════════════════════════╗
 ║     CS2 量化交易系统 - 完整虚拟回测系统 v2.0               ║
