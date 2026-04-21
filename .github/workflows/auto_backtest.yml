@@ -8,25 +8,30 @@ on:
   # 允许手动触发
   workflow_dispatch:
     inputs:
-      hours_back:
-        description: "回溯时间（小时）"
+      backtest_interval_minutes:
+        description: "回测间隔（分钟）"
         required: false
-        default: "72"
+        default: "360"
         type: choice
         options:
-          - "24"
-          - "72"
-          - "168"
-      initial_balance:
-        description: "初始虚拟资金"
+          - "60"
+          - "180"
+          - "360"
+          - "720"
+      run_duration_minutes:
+        description: "本次工作流运行时长（分钟）"
         required: false
-        default: "10000"
-        type: string
+        default: "330"
+        type: choice
+        options:
+          - "120"
+          - "240"
+          - "330"
 
 jobs:
   backtest:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 360
     
     env:
       PYTHONUNBUFFERED: 1
@@ -51,18 +56,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       
-      # 4. 运行回测
-      - name: 执行回测
+      # 4. 持续扫描 + 定时回测
+      - name: 执行常驻流水线
         id: backtest
         env:
           DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
         run: |
-          python scripts/run_backtest.py \
-            --hours-back ${{ inputs.hours_back || 72 }} \
-            --initial-balance ${{ inputs.initial_balance || 10000 }} \
-            --enable-charts \
-            --enable-dingtalk \
-            --dingtalk-webhook "${{ secrets.DINGTALK_WEBHOOK }}"
+          python scripts/live_pipeline.py \
+            --backtest-interval-minutes ${{ inputs.backtest_interval_minutes || 360 }} \
+            --run-duration-minutes ${{ inputs.run_duration_minutes || 330 }} \
+            --run-backtest-immediately
       
       # 5. 上传回测报告（成功时）
       - name: 上传回测报告
