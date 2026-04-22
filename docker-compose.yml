@@ -1,4 +1,4 @@
-version: '3.8'
+﻿version: '3.8'
 
 services:
   backtest:
@@ -7,35 +7,36 @@ services:
       dockerfile: Dockerfile
     container_name: cs2-backtest
     
-    # 环境变量
+    # 鐜鍙橀噺
     environment:
-      # API 配置
+      # API 閰嶇疆
       SDT_KEY: ${SDT_KEY:-your_sdt_key}
       CSQAQ_TOKEN: ${CSQAQ_TOKEN:-your_csqaq_token}
       
-      # 回测配置
+      # 鍥炴祴閰嶇疆
       INITIAL_BALANCE: ${INITIAL_BALANCE:-10000}
       FEE_RATE: ${FEE_RATE:-0.025}
       MIN_PROFIT_RATE: ${MIN_PROFIT_RATE:-0.03}
+      HOLDING_PERIOD_HOURS: ${HOLDING_PERIOD_HOURS:-72}
       
-      # Python 编码
+      # Python 缂栫爜
       PYTHONUNBUFFERED: 1
       PYTHONIOENCODING: utf-8
       TZ: Asia/Shanghai
     
-    # 数据卷挂载
+    # 鏁版嵁鍗锋寕杞?
     volumes:
-      # 输出结果映射到主机
+      # 杈撳嚭缁撴灉鏄犲皠鍒颁富鏈?
       - ./output/backtest_results:/app/output/backtest_results
       - ./output/backtest_logs:/app/output/backtest_logs
       
-      # 数据文件（可选，若想动态更新）
+      # 鏁版嵁鏂囦欢锛堝彲閫夛紝鑻ユ兂鍔ㄦ€佹洿鏂帮級
       - ./data:/app/data
     
-    # 重启策略
+    # 閲嶅惎绛栫暐
     restart: unless-stopped
     
-    # 资源限制（可选）
+    # 璧勬簮闄愬埗锛堝彲閫夛級
     deploy:
       resources:
         limits:
@@ -45,18 +46,18 @@ services:
           cpus: '1'
           memory: 1G
     
-    # 日志驱动
+    # 鏃ュ織椹卞姩
     logging:
       driver: "json-file"
       options:
         max-size: "100m"
         max-file: "10"
     
-    # 网络配置（可选）
+    # 缃戠粶閰嶇疆锛堝彲閫夛級
     networks:
       - backtest_network
 
-  # 可选：定时任务容器（使用 APScheduler）
+  # 鍙€夛細瀹氭椂浠诲姟瀹瑰櫒锛堜娇鐢?APScheduler锛?
   scheduler:
     build:
       context: .
@@ -95,9 +96,9 @@ networks:
   backtest_network:
     driver: bridge
 
-# 使用方法：
-# docker-compose up -d              # 后台启动
-# docker-compose logs -f            # 查看日志
-# docker-compose down               # 停止删除
-# docker-compose stop               # 只停止不删除
-# docker-compose restart            # 重启
+# 浣跨敤鏂规硶锛?
+# docker-compose up -d              # 鍚庡彴鍚姩
+# docker-compose logs -f            # 鏌ョ湅鏃ュ織
+# docker-compose down               # 鍋滄鍒犻櫎
+# docker-compose stop               # 鍙仠姝笉鍒犻櫎
+# docker-compose restart            # 閲嶅惎
