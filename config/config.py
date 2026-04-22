@@ -39,6 +39,7 @@ CONFIG = {
     "MIN_ER": 0.6,              # 价格效率比 (0.6以上代表走势足够平滑，不是乱跳)
     "MIN_HURST": 0.17,          # Hurst 指数门槛
     "BUY_SCORE_THRESHOLD": 76,  # 新版策略综合分门槛（提高后更严格）
+    "HOLDING_PERIOD_HOURS": 72,     # 最小持有期（小时），72小时才能卖出
     "BUY_COOLDOWN_MINUTES": 120,# 同一单品信号冷却时间
     "MAX_BUY_PER_HOUR": 15,     # 每小时最多记录 BUY 数
     
@@ -47,6 +48,10 @@ CONFIG = {
     "SLEEP_TIME": 3000,           # 轮次间歇时间 (秒)
     "HISTORY_WINDOW": 60,       # 关键修改：数据库保留最近 60 条记录 (支持计算长线 Hurst 指数)
     
+    # --- DEFAULT_PLATFORM (UU) ---
+    "DEFAULT_PLATFORM": "悠悠",
+    "PLATFORM_FEE_RATE": 0.025,
+
     # --- 文件与数据库 ---
     "DB_NAME": os.path.join(ROOT_DIR, "cs2_quant.db"),
     "BLACKLIST_FILE": os.path.join(ROOT_DIR, "low_sales_blacklist.txt"),

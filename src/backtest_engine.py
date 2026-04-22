@@ -13,6 +13,10 @@ from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from config import CONFIG
+
+# Minimum holding period for backtest (hours)
+def get_holding_period():
+    return CONFIG.get("HOLDING_PERIOD_HOURS", 72)
 from api_client import MarketAPI
 
 
@@ -60,6 +64,18 @@ class VirtualAccount:
         if name not in self.positions or self.positions[name] < quantity:
             return False, f"持仓不足：需要 {quantity} 个，现有 {self.positions.get(name, 0)} 个"
         
+        # 检查持有时间
+        buy_time_str = self.position_buy_time.get(name)
+        if buy_time_str:
+            try:
+                buy_dt = datetime.strptime(str(buy_time_str), "%Y-%m-%d %H:%M:%S")
+                sell_dt = datetime.strptime(str(timestamp), "%Y-%m-%d %H:%M:%S")
+                holding_hours = (sell_dt - buy_dt).total_seconds() / 3600
+                if holding_hours < get_holding_period():
+                    return False, f"持有期不足：需 {get_holding_period()}h，当前仅 {holding_hours:.1f}h"
+            except:
+                pass
+        
         revenue = quantity * price * (1 - CONFIG.get("FEE_RATE", 0.025))  # 扣手续费
         profit = revenue - quantity * self.position_cost[name]
         
@@ -68,6 +84,8 @@ class VirtualAccount:
         if self.positions[name] == 0:
             del self.positions[name]
             del self.position_cost[name]
+            if name in self.position_buy_time:
+                del self.position_buy_time[name]
         
         self.trades.append({
             'type': 'SELL',

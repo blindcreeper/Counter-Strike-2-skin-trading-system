@@ -216,22 +216,37 @@ def run():
 
                 try:
                     all_platforms = item.get("dataList", [])
+                    # === UU Platform Only Trading ===
+                    uu_platforms = [
+                        p for p in all_platforms
+                        if p.get("sellPrice", 0) > 0 and p.get("platform", "") == "悠悠"
+                    ]
+                    if len(uu_platforms) < 1:
+                        continue
+                    
+                    # Keep domestic_platforms for cross-platform spread scoring
                     domestic_platforms = [
                         p for p in all_platforms
                         if p.get("sellPrice", 0) > 0 and p.get("platform", "").upper() != "STEAM"
                     ]
-                    if len(domestic_platforms) < 2:
-                        continue
 
-                    domestic_platforms.sort(key=lambda x: x["sellPrice"])
-                    buy_p = domestic_platforms[0]
-                    buy_price = float(buy_p["sellPrice"])
-                    buy_plat = buy_p.get("platform", "UNKNOWN")
-
-                    domestic_platforms.sort(key=lambda x: x["sellPrice"], reverse=True)
-                    sell_p = domestic_platforms[0]
-                    sell_price = float(sell_p["sellPrice"])
-                    sell_plat = sell_p.get("platform", "UNKNOWN")
+                    # Trade on UU platform only: use UU prices
+                    uu_prices = [float(p["sellPrice"]) for p in uu_platforms]
+                    buy_price = min(uu_prices)
+                    sell_price = max(uu_prices)
+                    buy_plat = "悠悠"
+                    sell_plat = "悠悠"
+                    
+                    # Calculate cross-platform spread for scoring
+                    if domestic_platforms:
+                        sorted_by_buy = sorted(domestic_platforms, key=lambda x: x["sellPrice"])
+                        other_buy_price = float(sorted_by_buy[0]["sellPrice"])
+                        sorted_by_sell = sorted(domestic_platforms, key=lambda x: x["sellPrice"], reverse=True)
+                        other_sell_price = float(sorted_by_sell[0]["sellPrice"])
+                    else:
+                        other_buy_price = buy_price
+                        other_sell_price = sell_price
+                    cross_platform_spread = (other_sell_price - other_buy_price) / other_buy_price if other_buy_price > 0 else 0
 
                     if buy_price < CONFIG.get("MIN_PRICE", 30.0) or buy_price > CONFIG.get("MAX_PRICE", 3000.0):
                         continue
@@ -244,18 +259,14 @@ def run():
                             print(f"🚫 销量过低({sales})，加入黑名单: {name[:40]}")
                         continue
 
-                    # 修正利润计算：同时扣除买入和卖出手续费
-                    buy_fee_rate = CONFIG.get("FEE_RATE", 0.03)  # 买入平台手续费
-                    sell_fee_rate = 0.025 if sell_plat.upper() == "BUFF" else CONFIG.get("FEE_RATE", 0.03)
+                    # UU platform fee calculation
+                    platform_fee_rate = CONFIG.get("PLATFORM_FEE_RATE", 0.025)
                     
-                    # 实际买入成本 = 买入价 + 买入手续费
-                    total_buy_cost = buy_price * (1 + buy_fee_rate)
-                    
-                    # 实际卖出收入 = 卖出价 - 卖出手续费
-                    net_sell_income = sell_price * (1 - sell_fee_rate)
-                    
-                    # 净利润率 = (净卖出收入 - 总买入成本) / 买入价
-                    net_profit_rate = (net_sell_income - total_buy_cost) / buy_price
+                    # UU platform: buy fee + sell fee
+                    buy_fee = buy_price * platform_fee_rate
+                    sell_fee = sell_price * platform_fee_rate
+                    net_profit = (sell_price - buy_price) - buy_fee - sell_fee
+                    net_profit_rate = net_profit / buy_price if buy_price > 0 else 0
 
                     series_id = extract_series_id(item, ref)
                     db.save_item_snapshot(name, buy_price, sales, series_id=series_id)
@@ -276,6 +287,7 @@ def run():
                             "sell_to": sell_plat,
                             "sales": sales,
                             "net_profit_rate": net_profit_rate,
+                            "cross_platform_spread": cross_platform_spread,
                         },
                     )
                     action = report.get("action", "WAIT")

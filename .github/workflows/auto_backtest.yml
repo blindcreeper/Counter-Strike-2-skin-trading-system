@@ -28,6 +28,12 @@ on:
           - "240"
           - "330"
 
+      holding_period_hours:
+        description: "最小持有期（小时）"
+        required: false
+        default: "72"
+        type: string
+
 jobs:
   backtest:
     runs-on: ubuntu-latest
@@ -61,6 +67,7 @@ jobs:
         id: backtest
         env:
           DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+          HOLDING_PERIOD_HOURS: ${{ inputs.holding_period_hours || '72' }}
         run: |
           python scripts/live_pipeline.py \
             --backtest-interval-minutes ${{ inputs.backtest_interval_minutes || 360 }} \
@@ -83,6 +90,7 @@ jobs:
         if: failure()
         env:
           DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+          HOLDING_PERIOD_HOURS: ${{ inputs.holding_period_hours || '72' }}
         run: |
           python scripts/send_dingtalk_error.py \
             --webhook "${{ secrets.DINGTALK_WEBHOOK }}" \
