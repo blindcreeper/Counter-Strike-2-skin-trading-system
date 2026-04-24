@@ -2,8 +2,8 @@ name: CS2 每日回测
 
 on:
   # 每天18点执行（北京时间 = UTC 10:00）
-  schedule:
-    - cron: "0 10 * * *"
+ # schedule:
+  #  - cron: "0 10 * * *"
 
   # 允许手动触发
   workflow_dispatch:
