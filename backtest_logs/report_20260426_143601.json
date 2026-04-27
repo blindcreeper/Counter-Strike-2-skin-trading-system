@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-04-26T14:36:01.399415",
+  "metrics": {
+    "initial_balance": 10000.0,
+    "final_balance": 10000.0,
+    "total_profit": 0,
+    "total_return": 0,
+    "total_trades": 0,
+    "winning_trades": 0,
+    "losing_trades": 0,
+    "win_rate": 0,
+    "avg_profit": 0,
+    "max_profit_trade": 0,
+    "max_loss_trade": 0,
+    "avg_return": 0,
+    "best_return": 0,
+    "worst_return": 0,
+    "max_drawdown": 0,
+    "sharpe_ratio": 0
+  },
+  "trades": []
+}

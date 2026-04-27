@@ -30,6 +30,7 @@ class VirtualAccount:
         self.position_cost = {}  # 持仓成本 {商品名: 平均买入价}
         self.trades = []  # 已完成交易记录
         self.daily_values = []  # 每日账户价值
+        self.position_buy_time = {}  # 跟踪持仓买入时间
         
     def buy(self, name, quantity, price, timestamp):
         """买入操作"""
@@ -176,7 +177,7 @@ class BacktestEngine:
         # 按时间过滤
         now = datetime.now()
         start_time = now - timedelta(hours=hours_back)
-        samples = df[df["time"] > start_time].copy()
+        samples = df[df["time"] >= start_time].copy()
 
         if samples.empty:
             # 如果符合时间条件的数据为空，使用全部数据进行回测
