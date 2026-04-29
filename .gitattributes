@@ -1,0 +1,1 @@
+﻿*.py text eol=lf`n*.sh text eol=lf`nDockerfile text eol=lf`ndocker-compose.yml text eol=lf`n*.yml text eol=lf`n*.json text eol=lf`n
