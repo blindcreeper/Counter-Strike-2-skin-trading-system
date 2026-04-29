@@ -1,4 +1,4 @@
-﻿# CS2 皮肤量化回测系统 - Dockerfile
+# CS2 皮肤量化回测系统 - Dockerfile
 # 基础镜像：官方 Python 3.11
 FROM python:3.11-slim
 
@@ -14,8 +14,8 @@ ENV PYTHONUNBUFFERED=1 \
 # 安装系统依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    libatlas-base-dev \
-    gfortran \
+\
+\
     fonts-dejavu-core \
     curl \
     && rm -rf /var/lib/apt/lists/*

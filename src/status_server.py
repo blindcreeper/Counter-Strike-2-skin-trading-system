@@ -1,4 +1,4 @@
-﻿"""Lightweight HTTP status server for remote monitoring.
+"""Lightweight HTTP status server for remote monitoring.
 
 Provides:
   GET /           - JSON status snapshot

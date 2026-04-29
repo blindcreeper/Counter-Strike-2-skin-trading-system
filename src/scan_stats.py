@@ -1,4 +1,4 @@
-﻿"""Scan statistics tracker with heartbeat file.
+"""Scan statistics tracker with heartbeat file.
 
 Tracks scan progress, item counts, buy signals, errors,
 and writes a heartbeat file that can be monitored remotely.
