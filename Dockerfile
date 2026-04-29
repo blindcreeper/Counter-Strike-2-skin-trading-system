@@ -1,4 +1,4 @@
-# CS2 皮肤量化回测系统 - Dockerfile
+﻿# CS2 皮肤量化回测系统 - Dockerfile
 # 基础镜像：官方 Python 3.11
 FROM python:3.11-slim
 
@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libatlas-base-dev \
     gfortran \
     fonts-dejavu-core \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制依赖文件
@@ -37,15 +38,15 @@ COPY entrypoint.sh .
 # 给 entrypoint 脚本添加执行权限
 RUN chmod +x entrypoint.sh
 
-# 暴露端口（如果需要 Web 界面，可选）
-# EXPOSE 8000
+# 暴露状态监控端口
+EXPOSE 8199
 
-# 健康检查
-HEALTHCHECK --interval=60s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import sys; sys.exit(0)" || exit 1
+# 健康检查：访问状态 API 判断进程是否存活
+HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8199/health || exit 1
 
 # 入口点
 ENTRYPOINT ["./entrypoint.sh"]
 
 # 默认命令
-CMD ["quick"]
+CMD ["main"]

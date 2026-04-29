@@ -1,4 +1,4 @@
-import os
+﻿import os
 import json
 
 # 路径配置
@@ -31,26 +31,30 @@ CONFIG = {
     # --- 价格与基础过滤 ---
     "MIN_PRICE": 30.0,          # 最低买入价 30 元
     "MAX_PRICE": 6000,        # 最高买入价 3000 元
-    "MIN_SALES_24H": 40,        # Buff 24小时销量门槛 (低流动性直接跳过)
-    "FEE_RATE": 0.025,          # 平台综合手续费 (Buff一般为2.5%)
+    "MIN_SALES_24H": 40,        # Buff 24小时销量门槛(低流动性直接跳过)
+    "FEE_RATE": 0.025,          # 平台综合手续费率(Buff一般为2.5%)
 
-    # --- 量化因子阈值 (大脑的判断标准) ---
+    # --- 量化因子阈值(大脑的判断标准) ---
     "MIN_PROFIT": 0.07,         # 预期净利润率需 > 7% 才考虑入场
-    "MIN_ER": 0.6,              # 价格效率比 (0.6以上代表走势足够平滑，不是乱跳)
+    "MIN_ER": 0.6,              # 价格效率比(0.6以上代表走势足够平滑，不是乱跳)
     "MIN_HURST": 0.17,          # Hurst 指数门槛
     "BUY_SCORE_THRESHOLD": 76,  # 新版策略综合分门槛（提高后更严格）
-    "HOLDING_PERIOD_HOURS": 72,     # 最小持有期（小时），72小时才能卖出
-    "BUY_COOLDOWN_MINUTES": 120,# 同一单品信号冷却时间
+    "HOLDING_PERIOD_HOURS": 72,     # 最小持有期（小时）
+    "BUY_COOLDOWN_MINUTES": 120,# 同一商品信号冷却时间
     "MAX_BUY_PER_HOUR": 15,     # 每小时最多记录 BUY 数
     
     # --- 运行逻辑配置 ---
     "BATCH_SIZE": 50,           # 每次批量请求 50 个饰品
     "SLEEP_TIME": 3000,           # 轮次间歇时间 (秒)
-    "HISTORY_WINDOW": 60,       # 关键修改：数据库保留最近 60 条记录 (支持计算长线 Hurst 指数)
+    "HISTORY_WINDOW": 60,       # 关键修改：数据库保留最近60 条记录
     
     # --- DEFAULT_PLATFORM (UU) ---
     "DEFAULT_PLATFORM": "悠悠",
     "PLATFORM_FEE_RATE": 0.025,
+
+    # --- Status Server ---
+    "STATUS_HOST": os.getenv("STATUS_HOST", "0.0.0.0"),
+    "STATUS_PORT": int(os.getenv("STATUS_PORT", "8199")),
 
     # --- 文件与数据库 ---
     "DB_NAME": os.path.join(ROOT_DIR, "cs2_quant.db"),

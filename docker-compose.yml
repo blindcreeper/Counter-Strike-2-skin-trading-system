@@ -1,42 +1,62 @@
 ﻿version: '3.8'
 
 services:
-  backtest:
+  scanner:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: cs2-backtest
+    container_name: cs2-scanner
     
-    # 鐜鍙橀噺
+    # 环境变量
     environment:
-      # API 閰嶇疆
+      # API 配置
       SDT_KEY: ${SDT_KEY:-your_sdt_key}
       CSQAQ_TOKEN: ${CSQAQ_TOKEN:-your_csqaq_token}
       
-      # 鍥炴祴閰嶇疆
+      # 状态服务端口
+      STATUS_HOST: "0.0.0.0"
+      STATUS_PORT: "8199"
+      
+      # 回测配置
       INITIAL_BALANCE: ${INITIAL_BALANCE:-10000}
       FEE_RATE: ${FEE_RATE:-0.025}
       MIN_PROFIT_RATE: ${MIN_PROFIT_RATE:-0.03}
       HOLDING_PERIOD_HOURS: ${HOLDING_PERIOD_HOURS:-72}
       
-      # Python 缂栫爜
+      # Python 编码
       PYTHONUNBUFFERED: 1
       PYTHONIOENCODING: utf-8
       TZ: Asia/Shanghai
     
-    # 鏁版嵁鍗锋寕杞?
+    # 端口映射：状态监控 API
+    ports:
+      - "8199:8199"
+    
+    # 数据卷挂载
     volumes:
-      # 杈撳嚭缁撴灉鏄犲皠鍒颁富鏈?
+      # 输出结果映射到主机
       - ./output/backtest_results:/app/output/backtest_results
       - ./output/backtest_logs:/app/output/backtest_logs
+      - ./logs:/app/logs
       
-      # 鏁版嵁鏂囦欢锛堝彲閫夛紝鑻ユ兂鍔ㄦ€佹洿鏂帮級
+      # 数据文件（可选，若想动态更新）
       - ./data:/app/data
+      
+      # 心跳文件（宿主机可查看）
+      - ./heartbeat.json:/app/heartbeat.json
     
-    # 閲嶅惎绛栫暐
+    # 重启策略
     restart: unless-stopped
     
-    # 璧勬簮闄愬埗锛堝彲閫夛級
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8199/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    # 资源限制
     deploy:
       resources:
         limits:
@@ -46,18 +66,18 @@ services:
           cpus: '1'
           memory: 1G
     
-    # 鏃ュ織椹卞姩
+    # 日志驱动
     logging:
       driver: "json-file"
       options:
         max-size: "100m"
         max-file: "10"
     
-    # 缃戠粶閰嶇疆锛堝彲閫夛級
+    # 网络配置
     networks:
       - backtest_network
 
-  # 鍙€夛細瀹氭椂浠诲姟瀹瑰櫒锛堜娇鐢?APScheduler锛?
+  # 可选：定时任务容器（使用APScheduler）
   scheduler:
     build:
       context: .
@@ -81,7 +101,7 @@ services:
     entrypoint: python ./scripts/auto_backtest.py
     
     depends_on:
-      - backtest
+      - scanner
     
     networks:
       - backtest_network
@@ -96,9 +116,11 @@ networks:
   backtest_network:
     driver: bridge
 
-# 浣跨敤鏂规硶锛?
-# docker-compose up -d              # 鍚庡彴鍚姩
-# docker-compose logs -f            # 鏌ョ湅鏃ュ織
-# docker-compose down               # 鍋滄鍒犻櫎
-# docker-compose stop               # 鍙仠姝笉鍒犻櫎
-# docker-compose restart            # 閲嶅惎
+# 使用方法：
+# docker-compose up -d              # 后台启动
+# docker-compose logs -f            # 查看日志
+# docker-compose down               # 停止删除
+# docker-compose stop               # 只停止不删除
+# docker-compose restart            # 重启
+# curl http://VPS_IP:8199/          # 查看扫描状态
+# curl http://VPS_IP:8199/health    # 健康检查
