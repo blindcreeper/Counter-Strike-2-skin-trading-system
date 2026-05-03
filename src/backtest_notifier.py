@@ -10,6 +10,25 @@ from datetime import datetime
 import os
 
 
+def _format_factor_section(factor_report):
+    if not factor_report:
+        return "- 暂无因子评估数据"
+    lines = [f"- 样本数: {factor_report.get('sample_count', 0)}"]
+    for label, stats in sorted((factor_report.get("edge_groups") or {}).items()):
+        if not stats:
+            continue
+        lines.append(
+            f"- Edge {label}: 命中{stats['hit_rate']:.1%} 达标{stats['target_hit_rate']:.1%} 平均72h{stats['avg_outcome_72h']:.2%}"
+        )
+    for label, stats in sorted((factor_report.get("score_groups") or {}).items()):
+        if not stats:
+            continue
+        lines.append(
+            f"- Score {label}: 命中{stats['hit_rate']:.1%} 达标{stats['target_hit_rate']:.1%} 平均72h{stats['avg_outcome_72h']:.2%}"
+        )
+    return "\n".join(lines)
+
+
 class BacktestNotifier:
     """回测通知器"""
     
@@ -159,7 +178,7 @@ class BacktestNotifier:
         """
         return html
     
-    def send_dingtalk(self, webhook_url, metrics, trades=None, max_retries=3, retry_delay=2):
+    def send_dingtalk(self, webhook_url, metrics, trades=None, factor_report=None, max_retries=3, retry_delay=2):
         """发送钉钉通知（支持重试和GitHub Actions环境）
         
         Args:
@@ -210,6 +229,7 @@ class BacktestNotifier:
             
             # 构建评分指示
             score_indicator = self._get_score_indicator(metrics)
+            factor_block = _format_factor_section(factor_report)
             
             # 构建钉钉Markdown消息
             message = {
@@ -233,6 +253,9 @@ class BacktestNotifier:
 
 **📦 交易明细（最多10笔）：**
 {trade_block}
+
+**🧠 因子命中率：**
+{factor_block}
 
 ---
 ⏰ 完成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}{env_info}

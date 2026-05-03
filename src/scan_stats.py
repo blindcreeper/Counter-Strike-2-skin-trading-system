@@ -29,10 +29,14 @@ class ScanStats:
                 "current_round": 0,
                 "current_batch": 0,
                 "total_batches": 0,
+                "items_seen": 0,
+                "items_with_quotes": 0,
                 "items_scanned": 0,
                 "items_skipped_price": 0,
                 "items_skipped_sales": 0,
                 "items_skipped_blacklist": 0,
+                "items_skipped_edge": 0,
+                "items_skipped_cushion": 0,
                 "buy_signals": 0,
                 "wait_signals": 0,
                 "hold_signals": 0,
@@ -53,7 +57,14 @@ class ScanStats:
             self.state["started_at"] = datetime.now().isoformat()
             self.state["round_count"] = round_num
             self.state["current_round"] = round_num
+            self.state["items_seen"] = 0
+            self.state["items_with_quotes"] = 0
             self.state["items_scanned"] = 0
+            self.state["items_skipped_price"] = 0
+            self.state["items_skipped_sales"] = 0
+            self.state["items_skipped_blacklist"] = 0
+            self.state["items_skipped_edge"] = 0
+            self.state["items_skipped_cushion"] = 0
             self.state["buy_signals"] = 0
             self.state["wait_signals"] = 0
             self.state["hold_signals"] = 0
@@ -99,6 +110,14 @@ class ScanStats:
                 [entry] + self.state["recent_items"]
             )[:20]
         self._heartbeat()
+
+    def record_seen(self):
+        with self._lock:
+            self.state["items_seen"] += 1
+
+    def record_quote(self):
+        with self._lock:
+            self.state["items_with_quotes"] += 1
 
     def record_skip(self, reason):
         with self._lock:

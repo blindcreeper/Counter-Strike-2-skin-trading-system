@@ -17,6 +17,15 @@ class MarketAPI:
         self.csqaq_token = csqaq_token
         self.last_bind_time = 0
         self.ip_bound = False
+        self.last_csqaq_request_time = 0
+
+    def _respect_csqaq_rate_limit(self):
+        """CSQAQ public API limit: 1 request per second per IP."""
+        now_ts = time.time()
+        wait_sec = 1.05 - (now_ts - self.last_csqaq_request_time)
+        if wait_sec > 0:
+            time.sleep(wait_sec)
+        self.last_csqaq_request_time = time.time()
         
     def bind_local_ip(self):
         """
@@ -73,6 +82,7 @@ class MarketAPI:
     def get_series_list(self):
         """[CSQAQ] 获取热门系列列表"""
         self.ensure_ip_bound()
+        self._respect_csqaq_rate_limit()
         
         url = f"{self.csqaq_base}/api/v1/info/get_series_list"
         headers = {"ApiToken": self.csqaq_token}
@@ -122,17 +132,30 @@ class MarketAPI:
         }
         payload = {"marketHashNameList": names}
         
-        try:
-            response = requests.post(url, json=payload, headers=headers, timeout=20)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("code") == 200:
-                    return data.get("data", {}).get("success", {})
-            elif response.status_code == 401:
-                print("[X] CSQAQ 授权失败: 请确认ApiToken是否正确")
-            else:
-                print(f"[?] CSQAQ 返回异常状态码: {response.status_code}")
-        except Exception as e:
-            print(f"[!] CSQAQ 请求异常: {e}")
+        for attempt in range(3):
+            try:
+                self._respect_csqaq_rate_limit()
+                response = requests.post(url, json=payload, headers=headers, timeout=20)
+
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("code") == 200:
+                        result = data.get("data", {})
+                        if isinstance(result, dict):
+                            return result.get("success", result)
+                elif response.status_code == 401:
+                    print("[X] CSQAQ 授权失败: 请确认ApiToken是否正确")
+                    return {}
+                elif response.status_code in (429, 503):
+                    wait_sec = min(2 + attempt, 5)
+                    print(f"[!] CSQAQ 限流/网关繁忙({response.status_code})，{wait_sec}s 后重试")
+                    time.sleep(wait_sec)
+                    continue
+                else:
+                    print(f"[?] CSQAQ 返回异常状态码: {response.status_code}")
+            except Exception as e:
+                print(f"[!] CSQAQ 请求异常: {e}")
+                if attempt < 2:
+                    time.sleep(2 + attempt)
+                    continue
         return {}

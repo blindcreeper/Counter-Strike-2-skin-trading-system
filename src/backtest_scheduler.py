@@ -8,6 +8,8 @@ from datetime import datetime
 import threading
 import os
 
+from analyze_signal_factors import analyze_signal_factors
+
 
 class BacktestScheduler:
     """回测调度器 - 支持定时和循环运行"""
@@ -158,10 +160,12 @@ class BacktestRunner:
             
             # 7. 发送钉钉通知
             if enable_dingtalk and dingtalk_webhook:
+                factor_report = analyze_signal_factors(days=max(7, int(hours_back / 24)))
                 self.notifier.send_dingtalk(
                     dingtalk_webhook,
                     metrics,
                     trades=self.engine.backtest_results,
+                    factor_report=factor_report,
                 )
             
             # 8. 导出报告

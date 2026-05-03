@@ -2,6 +2,7 @@ import sqlite3
 import json
 import time
 
+
 class MarketDB:
     def __init__(self, db_name="cs2_quant.db"):
         self.db_name = db_name
@@ -31,6 +32,77 @@ class MarketDB:
                     recent_15d_data TEXT,    -- 存储 API 返回的 recently_data
                     sell_price_30 REAL,      -- 30日涨跌幅，用于宏观过滤
                     last_update INTEGER
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS signal_events (
+                    signal_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    signal_time INTEGER,
+                    hash_name TEXT,
+                    action TEXT,
+                    buy_price REAL,
+                    sell_price REAL,
+                    sales_24h INTEGER,
+                    price_edge_rate REAL,
+                    estimated_net_return REAL,
+                    score REAL,
+                    score1 REAL,
+                    score2 REAL,
+                    slope TEXT,
+                    er REAL,
+                    hurst REAL,
+                    changes INTEGER,
+                    series_id INTEGER,
+                    signal_meta TEXT,
+                    evaluation_status TEXT DEFAULT 'pending',
+                    eval_due_24h INTEGER,
+                    eval_due_72h INTEGER,
+                    eval_due_168h INTEGER,
+                    outcome_24h REAL,
+                    outcome_72h REAL,
+                    outcome_168h REAL,
+                    max_return_24h REAL,
+                    max_return_72h REAL,
+                    max_return_168h REAL,
+                    evaluated_at INTEGER
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS positions (
+                    position_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    hash_name TEXT UNIQUE,
+                    status TEXT,
+                    quantity INTEGER,
+                    entry_time INTEGER,
+                    entry_price REAL,
+                    last_price REAL,
+                    last_mark_time INTEGER,
+                    take_profit_rate REAL,
+                    stop_loss_rate REAL,
+                    max_holding_hours INTEGER,
+                    signal_id INTEGER,
+                    notes TEXT
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS executions (
+                    execution_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    position_id INTEGER,
+                    signal_id INTEGER,
+                    hash_name TEXT,
+                    side TEXT,
+                    exec_time INTEGER,
+                    price REAL,
+                    quantity INTEGER,
+                    gross_amount REAL,
+                    fee_amount REAL,
+                    net_amount REAL,
+                    realized_return REAL,
+                    reason TEXT,
+                    execution_meta TEXT
                 )
             ''')
             conn.commit()
@@ -106,3 +178,213 @@ class MarketDB:
                     "series_name": row[3]
                 }
             return None
+
+    def record_signal_event(self, signal_data):
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            now_ts = int(time.time())
+            signal_time = int(signal_data.get("signal_time", now_ts))
+            cursor.execute('''
+                INSERT INTO signal_events (
+                    signal_time, hash_name, action, buy_price, sell_price,
+                    sales_24h, price_edge_rate, estimated_net_return,
+                    score, score1, score2, slope, er, hurst, changes,
+                    series_id, signal_meta, eval_due_24h, eval_due_72h,
+                    eval_due_168h
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                signal_time,
+                signal_data.get("hash_name"),
+                signal_data.get("action"),
+                signal_data.get("buy_price"),
+                signal_data.get("sell_price"),
+                signal_data.get("sales_24h"),
+                signal_data.get("price_edge_rate"),
+                signal_data.get("estimated_net_return"),
+                signal_data.get("score"),
+                signal_data.get("score1"),
+                signal_data.get("score2"),
+                signal_data.get("slope"),
+                signal_data.get("er"),
+                signal_data.get("hurst"),
+                signal_data.get("changes"),
+                signal_data.get("series_id"),
+                json.dumps(signal_data.get("signal_meta", {}), ensure_ascii=False),
+                signal_time + 24 * 3600,
+                signal_time + 72 * 3600,
+                signal_time + 168 * 3600,
+            ))
+            conn.commit()
+            return cursor.lastrowid
+
+    def upsert_position(self, position_data):
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO positions (
+                    hash_name, status, quantity, entry_time, entry_price,
+                    last_price, last_mark_time, take_profit_rate,
+                    stop_loss_rate, max_holding_hours, signal_id, notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(hash_name) DO UPDATE SET
+                    status=excluded.status,
+                    quantity=excluded.quantity,
+                    entry_time=excluded.entry_time,
+                    entry_price=excluded.entry_price,
+                    last_price=excluded.last_price,
+                    last_mark_time=excluded.last_mark_time,
+                    take_profit_rate=excluded.take_profit_rate,
+                    stop_loss_rate=excluded.stop_loss_rate,
+                    max_holding_hours=excluded.max_holding_hours,
+                    signal_id=excluded.signal_id,
+                    notes=excluded.notes
+            ''', (
+                position_data.get("hash_name"),
+                position_data.get("status", "OPEN"),
+                position_data.get("quantity", 1),
+                position_data.get("entry_time"),
+                position_data.get("entry_price"),
+                position_data.get("last_price"),
+                position_data.get("last_mark_time"),
+                position_data.get("take_profit_rate"),
+                position_data.get("stop_loss_rate"),
+                position_data.get("max_holding_hours"),
+                position_data.get("signal_id"),
+                position_data.get("notes"),
+            ))
+            conn.commit()
+
+    def get_open_position(self, name):
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT position_id, hash_name, status, quantity, entry_time,
+                       entry_price, last_price, last_mark_time,
+                       take_profit_rate, stop_loss_rate, max_holding_hours,
+                       signal_id, notes
+                FROM positions
+                WHERE hash_name = ? AND status = 'OPEN'
+            ''', (name,))
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return {
+                "position_id": row[0],
+                "hash_name": row[1],
+                "status": row[2],
+                "quantity": row[3],
+                "entry_time": row[4],
+                "entry_price": row[5],
+                "last_price": row[6],
+                "last_mark_time": row[7],
+                "take_profit_rate": row[8],
+                "stop_loss_rate": row[9],
+                "max_holding_hours": row[10],
+                "signal_id": row[11],
+                "notes": row[12],
+            }
+
+    def close_position(self, name, exit_price, exit_time, note=""):
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE positions
+                SET status = 'CLOSED', last_price = ?, last_mark_time = ?, notes = ?
+                WHERE hash_name = ? AND status = 'OPEN'
+            ''', (exit_price, exit_time, note, name))
+            conn.commit()
+
+    def record_execution(self, execution_data):
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO executions (
+                    position_id, signal_id, hash_name, side, exec_time,
+                    price, quantity, gross_amount, fee_amount, net_amount,
+                    realized_return, reason, execution_meta
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                execution_data.get("position_id"),
+                execution_data.get("signal_id"),
+                execution_data.get("hash_name"),
+                execution_data.get("side"),
+                execution_data.get("exec_time"),
+                execution_data.get("price"),
+                execution_data.get("quantity"),
+                execution_data.get("gross_amount"),
+                execution_data.get("fee_amount"),
+                execution_data.get("net_amount"),
+                execution_data.get("realized_return"),
+                execution_data.get("reason"),
+                json.dumps(execution_data.get("execution_meta", {}), ensure_ascii=False),
+            ))
+            conn.commit()
+
+    def get_pending_signal_evaluations(self, now_ts=None):
+        now_ts = int(now_ts or time.time())
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT signal_id, signal_time, hash_name, buy_price,
+                       outcome_24h, outcome_72h, outcome_168h
+                FROM signal_events
+                WHERE evaluation_status = 'pending'
+                  AND eval_due_24h <= ?
+            ''', (now_ts,))
+            rows = cursor.fetchall()
+            return [
+                {
+                    "signal_id": row[0],
+                    "signal_time": row[1],
+                    "hash_name": row[2],
+                    "buy_price": row[3],
+                    "outcome_24h": row[4],
+                    "outcome_72h": row[5],
+                    "outcome_168h": row[6],
+                }
+                for row in rows
+            ]
+
+    def update_signal_evaluation(self, signal_id, evaluation_data):
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE signal_events
+                SET outcome_24h = COALESCE(?, outcome_24h),
+                    outcome_72h = COALESCE(?, outcome_72h),
+                    outcome_168h = COALESCE(?, outcome_168h),
+                    max_return_24h = COALESCE(?, max_return_24h),
+                    max_return_72h = COALESCE(?, max_return_72h),
+                    max_return_168h = COALESCE(?, max_return_168h),
+                    evaluated_at = ?,
+                    evaluation_status = ?
+                WHERE signal_id = ?
+            ''', (
+                evaluation_data.get("outcome_24h"),
+                evaluation_data.get("outcome_72h"),
+                evaluation_data.get("outcome_168h"),
+                evaluation_data.get("max_return_24h"),
+                evaluation_data.get("max_return_72h"),
+                evaluation_data.get("max_return_168h"),
+                int(time.time()),
+                evaluation_data.get("evaluation_status", "completed"),
+                signal_id,
+            ))
+            conn.commit()
+
+    def get_signal_events(self, action=None, min_signal_time=None):
+        with sqlite3.connect(self.db_name) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            query = "SELECT * FROM signal_events WHERE 1=1"
+            params = []
+            if action:
+                query += " AND action = ?"
+                params.append(action)
+            if min_signal_time:
+                query += " AND signal_time >= ?"
+                params.append(int(min_signal_time))
+            query += " ORDER BY signal_time DESC"
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]

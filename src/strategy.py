@@ -11,7 +11,9 @@ class QuantStrategy:
 
     def __init__(self, config):
         self.config = config
-        self.min_profit_gate = float(config.get("MIN_PROFIT", 0.03))
+        self.min_net_profit_gate = float(
+            config.get("MIN_NET_PROFIT_RATE", config.get("MIN_PROFIT", 0.03))
+        )
         self.buy_score_threshold = float(config.get("BUY_SCORE_THRESHOLD", 62))
 
         # 从配置读取权重，如果没有则使用默认值
@@ -157,12 +159,12 @@ class QuantStrategy:
     def _pair_score(self, buy_from, sell_to):
         return self.pair_weights.get((str(buy_from or "").upper(), str(sell_to or "").upper()), 0)
 
-    def _spread_score(self, net_profit_rate, buy_from, sell_to):
+    def _spread_score(self, price_edge_rate, buy_from, sell_to):
         """
         Increase opportunity score when cross-platform spread is large.
         Higher spread carries much more weight in V2.1.
         """
-        p = self._safe_float(net_profit_rate, -1.0)
+        p = self._safe_float(price_edge_rate, -1.0)
         if p < 0:
             return -12
         if p < 0.03:
@@ -209,12 +211,12 @@ class QuantStrategy:
         buy_from = str(trade_ctx.get("buy_from", "")).upper()
         sell_to = str(trade_ctx.get("sell_to", "")).upper()
         name = trade_ctx.get("name", "")
-        net_profit_rate = self._safe_float(trade_ctx.get("net_profit_rate"), -1.0)
+        price_edge_rate = self._safe_float(trade_ctx.get("price_edge_rate"), -1.0)
 
         # 综合分主要由动量因子和平台价差构成，辅助考虑价格区间、平台对和关键词。
         score = 0.0
         score += self.calculate_momentum_score(slope, er, hurst_val, changes) * self.momentum_weight
-        score += self._spread_score(net_profit_rate, buy_from, sell_to) * self.spread_weight
+        score += self._spread_score(price_edge_rate, buy_from, sell_to) * self.spread_weight
         score += self._pair_score(buy_from, sell_to) * self.pair_weight
         score += self._price_bucket_score(buy_price) * self.price_weight
         score += self._keyword_score(name) * self.keyword_weight
@@ -225,7 +227,7 @@ class QuantStrategy:
         item_data: {"prices": [], "sales": [], "series_trend": float, ...}
         trade_ctx: {
           "name": str, "buy_price": float, "buy_from": str,
-          "sell_to": str, "net_profit_rate": float
+          "sell_to": str, "price_edge_rate": float, "estimated_net_return": float
         }
         """
         trade_ctx = trade_ctx or {}
@@ -260,8 +262,11 @@ class QuantStrategy:
         momentum_score = self.calculate_momentum_score(slope, er, hurst_val, changes)
         composite_score = self.calculate_opportunity_score(slope, er, hurst_val, changes, trade_ctx)
 
-        net_profit_rate = self._safe_float(trade_ctx.get("net_profit_rate"), -1.0)
-        if net_profit_rate < self.min_profit_gate:
+        estimated_net_return = self._safe_float(
+            trade_ctx.get("estimated_net_return", trade_ctx.get("net_profit_rate")),
+            -1.0,
+        )
+        if estimated_net_return < self.min_net_profit_gate:
             return {
                 "action": "HOLD",
                 "score": composite_score,
@@ -271,13 +276,13 @@ class QuantStrategy:
                 "er": round(er, 2),
                 "changes": changes,
                 "hurst": round(hurst_val, 2),
-                "msg": f"预期净利不足({net_profit_rate:.2%} < {self.min_profit_gate:.2%})",
+                "msg": f"安全垫不足({estimated_net_return:.2%} < {self.min_net_profit_gate:.2%})",
             }
 
         # Hard risk control from observed weak zones.
         buy_from = str(trade_ctx.get("buy_from", "")).upper()
         sell_to = str(trade_ctx.get("sell_to", "")).upper()
-        if (buy_from, sell_to) == ("C5", "HALOSKINS") and net_profit_rate < 0.09:
+        if (buy_from, sell_to) == ("C5", "HALOSKINS") and estimated_net_return < 0.09:
             return {
                 "action": "HOLD",
                 "score": composite_score,
@@ -290,7 +295,7 @@ class QuantStrategy:
                 "msg": "C5->HALOSKINS 组合仅保留高净利样本",
             }
 
-        if (buy_from, sell_to) == ("C5", "BUFF") and net_profit_rate < 0.07:
+        if (buy_from, sell_to) == ("C5", "BUFF") and estimated_net_return < 0.07:
             return {
                 "action": "HOLD",
                 "score": composite_score,
@@ -303,7 +308,7 @@ class QuantStrategy:
                 "msg": "C5->BUFF 组合仅保留高净利样本",
             }
 
-        if self._safe_float(trade_ctx.get("buy_price"), 0.0) >= 1500 and net_profit_rate < 0.08:
+        if self._safe_float(trade_ctx.get("buy_price"), 0.0) >= 1500 and estimated_net_return < 0.08:
             return {
                 "action": "HOLD",
                 "score": composite_score,
@@ -316,7 +321,7 @@ class QuantStrategy:
                 "msg": "高价品需更高净利空间(>=8%)",
             }
 
-        if changes >= 7 and net_profit_rate < 0.08:
+        if changes >= 7 and estimated_net_return < 0.08:
             return {
                 "action": "HOLD",
                 "score": composite_score,

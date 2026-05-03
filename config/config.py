@@ -35,13 +35,16 @@ CONFIG = {
     "FEE_RATE": 0.025,          # 平台综合手续费率(Buff一般为2.5%)
 
     # --- 量化因子阈值(大脑的判断标准) ---
-    "MIN_PROFIT": 0.07,         # 预期净利润率需 > 7% 才考虑入场
+    "MIN_EDGE_SCORE": 0.02,     # 最低跨平台价差因子，作为趋势预测特征的基础门槛
+    "MIN_NET_PROFIT_RATE": 0.02,# 最低估算净收益率，避免完全没有安全垫的机会
     "MIN_ER": 0.6,              # 价格效率比(0.6以上代表走势足够平滑，不是乱跳)
     "MIN_HURST": 0.17,          # Hurst 指数门槛
-    "BUY_SCORE_THRESHOLD": 76,  # 新版策略综合分门槛（提高后更严格）
+    "BUY_SCORE_THRESHOLD": 68,  # 新版策略综合分门槛，适度放宽以提升候选覆盖率
     "HOLDING_PERIOD_HOURS": 72,     # 最小持有期（小时）
     "BUY_COOLDOWN_MINUTES": 120,# 同一商品信号冷却时间
     "MAX_BUY_PER_HOUR": 15,     # 每小时最多记录 BUY 数
+    "TAKE_PROFIT_RATE": 0.08,   # 持仓止盈阈值
+    "STOP_LOSS_RATE": -0.05,    # 持仓止损阈值
     
     # --- 运行逻辑配置 ---
     "BATCH_SIZE": 50,           # 每次批量请求 50 个饰品
@@ -55,6 +58,7 @@ CONFIG = {
     # --- Status Server ---
     "STATUS_HOST": os.getenv("STATUS_HOST", "0.0.0.0"),
     "STATUS_PORT": int(os.getenv("STATUS_PORT", "8199")),
+    "DINGTALK_REPORT_INTERVAL_SECONDS": int(os.getenv("DINGTALK_REPORT_INTERVAL_SECONDS", "900")),
 
     # --- 文件与数据库 ---
     "DB_NAME": os.path.join(ROOT_DIR, "cs2_quant.db"),
