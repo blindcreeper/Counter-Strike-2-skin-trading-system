@@ -235,8 +235,10 @@ class BacktestNotifier:
             message = {
                 "msgtype": "markdown",
                 "markdown": {
-                    "title": f"{score_indicator} CS2量化回测完成",
-                    "text": f"""## {score_indicator} 虚拟回测结果
+                    "title": f"ding {score_indicator} CS2量化回测完成",
+                    "text": f"""ding CS2量化回测报告
+
+## {score_indicator} 虚拟回测结果
 
 **📊 核心指标：**
 - 初始资金: **¥{metrics.get('initial_balance', 10000):.2f}**

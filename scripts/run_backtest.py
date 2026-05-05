@@ -15,6 +15,7 @@ from backtest_db import BacktestDatabase
 from backtest_visualizer import BacktestVisualizer
 from backtest_notifier import BacktestNotifier
 from backtest_scheduler import BacktestScheduler, BacktestRunner
+from auto_tuner import AutoTuner
 
 
 class CompleteBacktestSystem:
@@ -27,6 +28,7 @@ class CompleteBacktestSystem:
         self.notifier = BacktestNotifier()
         self.runner = BacktestRunner(self.engine, self.notifier, self.visualizer, self.db)
         self.scheduler = BacktestScheduler(self.run_backtest)
+        self.tuner = AutoTuner(self, self.db)
     
     def run_backtest(self, hours_back=72, initial_balance=10000, 
                      enable_charts=True, enable_email=False, email_config=None,
@@ -40,6 +42,13 @@ class CompleteBacktestSystem:
             email_config=email_config,
             enable_dingtalk=enable_dingtalk,
             dingtalk_webhook=dingtalk_webhook
+        )
+
+    def run_auto_tune(self, trials=12, hours_back=72, initial_balance=10000):
+        return self.tuner.tune(
+            trials=trials,
+            hours_back=hours_back,
+            initial_balance=initial_balance,
         )
     
     def start_auto_backtest(self, schedule_type='daily', schedule_param=22):

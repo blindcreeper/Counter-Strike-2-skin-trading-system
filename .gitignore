@@ -73,9 +73,24 @@ Thumbs.db
 # Sensitive data
 config/config_secret.py
 config/.env
+config/app_config.json
 *.key
 *.pem
 *.cert
+
+# Claude Code
+.claude/
+CLAUDE.md
+skills/
+
+# Binary databases
+*.db
+
+# Backtest logs and reports
+backtest_logs/
+
+# Tools
+tools/
 
 # Large data files (optional - uncomment if needed)
 # data/steam_items_database.json

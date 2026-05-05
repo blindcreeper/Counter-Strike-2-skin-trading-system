@@ -196,70 +196,93 @@ class BacktestEngine:
         """运行完整的虚拟交易模拟"""
         self.account = VirtualAccount(initial_balance)
         self.backtest_results = []
-        
+
         print(f"\n🚀 开始虚拟交易模拟")
         print(f"   初始资金: ¥{initial_balance:.2f}")
         print(f"   模拟交易数: {len(opportunities)}\n")
-        
+
+        # Batch-fetch latest sell prices via CSQAQ API
+        unique_names = list({opp.get('name', '') for opp in opportunities if opp.get('name')})
+        latest_sell_prices = {}
+        if unique_names:
+            print(f"📡 获取 {len(unique_names)} 个商品的最新卖出价...")
+            for batch_start in range(0, len(unique_names), 50):
+                batch = unique_names[batch_start:batch_start + 50]
+                try:
+                    prices = self.api.get_batch_csqaq(batch)
+                    if isinstance(prices, dict):
+                        for n, info in prices.items():
+                            if isinstance(info, dict):
+                                sp = info.get("buffSellPrice") or 0
+                                if sp:
+                                    latest_sell_prices[n] = float(sp)
+                except Exception as e:
+                    print(f"⚠️  批量获取价格失败: {e}")
+            print(f"   成功获取 {len(latest_sell_prices)} 个商品的当前卖出价\n")
+
+        sell_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
         for i, opp in enumerate(opportunities, 1):
             try:
                 name = opp.get('name', '')
                 buy_price = float(str(opp.get('price', opp.get('buy_price', 0))).replace('%', ''))
                 buy_time = str(opp.get("time") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-                
-                # 卖出价：优先用 CSV 中的 sell_price，无则用 buy_price 加上预期利润
-                sell_price_str = opp.get('sell_price', '')
-                if sell_price_str and str(sell_price_str).strip() not in ['', 'None']:
-                    try:
-                        sell_price = float(str(sell_price_str).replace('%', ''))
-                    except:
-                        # 如果转换失败，假设卖出价比买入价高 3% (保守估计)
-                        sell_price = buy_price * 1.03
+
+                # Use live sell price from API; fall back to CSV sell_price; last resort +3%
+                if name in latest_sell_prices:
+                    sell_price = latest_sell_prices[name]
+                    price_source = "live"
                 else:
-                    # 没有卖出价信息，使用保守估计
-                    sell_price = buy_price * 1.03
-                
+                    sell_price_str = opp.get('sell_price', '')
+                    if sell_price_str and str(sell_price_str).strip() not in ['', 'None']:
+                        try:
+                            sell_price = float(str(sell_price_str).replace('%', ''))
+                            price_source = "csv"
+                        except:
+                            sell_price = buy_price * 1.03
+                            price_source = "est"
+                    else:
+                        sell_price = buy_price * 1.03
+                        price_source = "est"
+
                 if sell_price <= 0 or buy_price <= 0:
                     continue
-                
-                # 模拟买入
+
+                # Buy
                 buy_success, msg = self.account.buy(name, quantity=1, price=buy_price, timestamp=buy_time)
                 if not buy_success:
                     continue
-                
-                # 延迟卖出（模拟市场波动）
-                time.sleep(0.1)
-                
-                # 模拟卖出
-                sell_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                # Sell (using sell_time = now to bypass holding period check for backtest)
                 sell_success, msg = self.account.sell(name, quantity=1, price=sell_price, timestamp=sell_time)
-                
-                # 计算单笔收益
+
                 fee_cost = buy_price * CONFIG.get("FEE_RATE", 0.025)
                 fee_rev = sell_price * CONFIG.get("FEE_RATE", 0.025)
                 net_profit = (sell_price - buy_price) - fee_cost - fee_rev
                 profit_rate = net_profit / buy_price if buy_price > 0 else 0
-                
+
                 self.backtest_results.append({
                     'name': name,
                     'buy_price': buy_price,
                     'sell_price': sell_price,
                     'net_profit': net_profit,
                     'profit_rate': profit_rate,
-                    'timestamp': buy_time,  # backward-compatible alias for buy timestamp
+                    'timestamp': buy_time,
                     'buy_time': buy_time,
                     'sell_time': sell_time,
-                    'account_balance': self.account.balance
+                    'account_balance': self.account.balance,
+                    'price_source': price_source,
                 })
-                
+
+                src_tag = {"live": "🟢", "csv": "📄", "est": "📝"}.get(price_source, "?")
                 status = "✅" if profit_rate > 0 else "❌"
-                print(f"{status} [{i:3d}] {name[:20]:<20} | 买:{buy_price:7.2f} → 卖:{sell_price:7.2f} | "
+                print(f"{status} [{i:3d}] {name[:20]:<20} | 买:{buy_price:7.2f} → 卖:{sell_price:7.2f} {src_tag} | "
                       f"利润:{profit_rate:7.2%} | 账户:{self.account.balance:10.2f}")
-                
+
             except Exception as e:
                 print(f"⚠️  {opp.get('name', 'Unknown')[:30]} 模拟失败: {str(e)[:40]}")
                 continue
-        
+
         return self._calculate_metrics()
     
     def _calculate_metrics(self):

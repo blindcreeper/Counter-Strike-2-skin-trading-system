@@ -49,7 +49,47 @@ class BacktestDatabase:
             max_drawdown REAL,
             sharpe_ratio REAL,
             version TEXT,
+            strategy_params TEXT,
+            objective_score REAL,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
+
+        cursor.execute("PRAGMA table_info(backtest_records)")
+        record_columns = [row[1] for row in cursor.fetchall()]
+        if "strategy_params" not in record_columns:
+            cursor.execute("ALTER TABLE backtest_records ADD COLUMN strategy_params TEXT")
+        if "objective_score" not in record_columns:
+            cursor.execute("ALTER TABLE backtest_records ADD COLUMN objective_score REAL")
+
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS optimization_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_time TEXT DEFAULT CURRENT_TIMESTAMP,
+            optimizer_name TEXT,
+            objective_name TEXT,
+            search_space TEXT,
+            best_params TEXT,
+            best_score REAL,
+            trials_count INTEGER,
+            notes TEXT
+        )
+        """)
+
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS optimization_trials (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER,
+            trial_no INTEGER,
+            params TEXT,
+            score REAL,
+            total_return REAL,
+            win_rate REAL,
+            max_drawdown REAL,
+            sharpe_ratio REAL,
+            trades_count INTEGER,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(run_id) REFERENCES optimization_runs(id)
         )
         """)
         
@@ -84,7 +124,7 @@ class BacktestDatabase:
         conn.commit()
         conn.close()
     
-    def save_backtest(self, metrics, trades, account_values, version="002"):
+    def save_backtest(self, metrics, trades, account_values, version="002", strategy_params=None, objective_score=None):
         """保存完整回测记录"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
@@ -97,8 +137,9 @@ class BacktestDatabase:
             backtest_date, initial_balance, final_balance, total_profit, total_return,
             total_trades, winning_trades, losing_trades, win_rate,
             avg_profit, max_profit_trade, max_loss_trade,
-            avg_return, best_return, worst_return, max_drawdown, sharpe_ratio, version
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            avg_return, best_return, worst_return, max_drawdown, sharpe_ratio, version,
+            strategy_params, objective_score
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             backtest_date,
             metrics.get('initial_balance', 10000),
@@ -117,7 +158,9 @@ class BacktestDatabase:
             metrics['worst_return'],
             metrics['max_drawdown'],
             metrics['sharpe_ratio'],
-            version
+            version,
+            json.dumps(strategy_params or {}, ensure_ascii=False),
+            objective_score,
         ))
         
         backtest_id = cursor.lastrowid
@@ -167,6 +210,50 @@ class BacktestDatabase:
         conn.close()
         
         return backtest_id
+
+    def save_optimization_run(self, optimizer_name, objective_name, search_space, best_params, best_score, trials_count, notes=""):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+        INSERT INTO optimization_runs (
+            optimizer_name, objective_name, search_space,
+            best_params, best_score, trials_count, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            optimizer_name,
+            objective_name,
+            json.dumps(search_space, ensure_ascii=False),
+            json.dumps(best_params, ensure_ascii=False),
+            best_score,
+            trials_count,
+            notes,
+        ))
+        run_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return run_id
+
+    def save_optimization_trial(self, run_id, trial_no, params, metrics, score):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+        INSERT INTO optimization_trials (
+            run_id, trial_no, params, score, total_return,
+            win_rate, max_drawdown, sharpe_ratio, trades_count
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            run_id,
+            trial_no,
+            json.dumps(params, ensure_ascii=False),
+            score,
+            metrics.get('total_return'),
+            metrics.get('win_rate'),
+            metrics.get('max_drawdown'),
+            metrics.get('sharpe_ratio'),
+            metrics.get('total_trades'),
+        ))
+        conn.commit()
+        conn.close()
     
     def get_latest_backtest(self):
         """获取最新一次回测"""

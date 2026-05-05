@@ -296,7 +296,14 @@ def run():
                     if action != "BUY":
                         executor.maybe_close_position(name, sell_price)
 
-                    stats.record_item(name, action, score=report.get("score"))
+                    stats.record_item(
+                        name,
+                        action,
+                        score=report.get("score"),
+                        buy_price=buy_price,
+                        sell_price=sell_price,
+                        profit_rate=estimated_net_return,
+                    )
 
                     if action == "BUY":
                         notify_buy_signal(
@@ -343,10 +350,7 @@ def run():
                     continue
 
             now_report_ts = time.time()
-            report_interval = CONFIG.get("DINGTALK_REPORT_INTERVAL_SECONDS", 900)
-            if now_report_ts - last_report_ts >= report_interval:
-                notify_scan_report(stats.get_snapshot())
-                last_report_ts = now_report_ts
+            # per-batch periodic report disabled; only report at round end
 
             print(f"--- progress {min(i + batch_size, len(active_names))}/{len(active_names)} ---")
             time.sleep(62)

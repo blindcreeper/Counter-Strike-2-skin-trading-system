@@ -12,6 +12,7 @@ LOG_FILE="$LOG_DIR/backtest_$(date +%Y%m%d_%H%M%S).log"
 # 确保输出目录存在
 mkdir -p "$LOG_DIR"
 mkdir -p "/app/output/backtest_results"
+mkdir -p "/app/shared_data"
 
 # 导出 Python 路径
 export PYTHONPATH="${PYTHONPATH:-/app/src}"

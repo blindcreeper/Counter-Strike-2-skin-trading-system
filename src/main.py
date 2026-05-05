@@ -360,7 +360,14 @@ def run():
                     if action != "BUY":
                         executor.maybe_close_position(name, sell_price)
 
-                    stats.record_item(name, action, score=report.get("score"))
+                    stats.record_item(
+                        name,
+                        action,
+                        score=report.get("score"),
+                        buy_price=buy_price,
+                        sell_price=sell_price,
+                        profit_rate=estimated_net_return,
+                    )
 
                     if action == "BUY":
                         notify_buy_signal(

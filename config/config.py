@@ -21,12 +21,32 @@ def _load_app_config():
 
 APP_CFG = _load_app_config()
 API_CFG = APP_CFG.get("api", {}) if isinstance(APP_CFG.get("api"), dict) else {}
+STRATEGY_CFG = APP_CFG.get("strategy", {}) if isinstance(APP_CFG.get("strategy"), dict) else {}
+TUNING_CFG = APP_CFG.get("tuning", {}) if isinstance(APP_CFG.get("tuning"), dict) else {}
+
+
+def _resolve_active_strategy_config():
+    active = {}
+    if isinstance(STRATEGY_CFG, dict):
+        active.update(STRATEGY_CFG)
+
+    if isinstance(TUNING_CFG, dict):
+        pending_params = TUNING_CFG.get("pending_params")
+        applied_params = TUNING_CFG.get("applied_params")
+        if isinstance(applied_params, dict):
+            active.update(applied_params)
+        if isinstance(pending_params, dict):
+            active.setdefault("_pending_params", pending_params)
+    return active
+
+
+ACTIVE_STRATEGY_CFG = _resolve_active_strategy_config()
 
 CONFIG = {
     # --- 鉴权信息 ---
     # 优先级：环境变量 > app_config.json > 默认值（便于本地调试）
-    "SDT_KEY": os.getenv("SDT_KEY", API_CFG.get("sdt_key", "aa1f20fe10ca45248d260201df963772")),
-    "CSQAQ_TOKEN": os.getenv("CSQAQ_TOKEN", API_CFG.get("csqaq_token", "SBWSE1M7Q6P8E65703O8O9Q7")),
+    "SDT_KEY": os.getenv("SDT_KEY", API_CFG.get("sdt_key", "CHANGE_ME")),
+    "CSQAQ_TOKEN": os.getenv("CSQAQ_TOKEN", API_CFG.get("csqaq_token", "CHANGE_ME")),
     
     # --- 价格与基础过滤 ---
     "MIN_PRICE": 30.0,          # 最低买入价 30 元
@@ -35,16 +55,16 @@ CONFIG = {
     "FEE_RATE": 0.025,          # 平台综合手续费率(Buff一般为2.5%)
 
     # --- 量化因子阈值(大脑的判断标准) ---
-    "MIN_EDGE_SCORE": 0.02,     # 最低跨平台价差因子，作为趋势预测特征的基础门槛
-    "MIN_NET_PROFIT_RATE": 0.02,# 最低估算净收益率，避免完全没有安全垫的机会
+    "MIN_EDGE_SCORE": float(ACTIVE_STRATEGY_CFG.get("MIN_EDGE_SCORE", 0.02)),     # 最低跨平台价差因子，作为趋势预测特征的基础门槛
+    "MIN_NET_PROFIT_RATE": float(ACTIVE_STRATEGY_CFG.get("MIN_NET_PROFIT_RATE", 0.0)), # 先放宽到0%，优先让BUY信号产出用于验证链路
     "MIN_ER": 0.6,              # 价格效率比(0.6以上代表走势足够平滑，不是乱跳)
     "MIN_HURST": 0.17,          # Hurst 指数门槛
-    "BUY_SCORE_THRESHOLD": 68,  # 新版策略综合分门槛，适度放宽以提升候选覆盖率
+    "BUY_SCORE_THRESHOLD": int(ACTIVE_STRATEGY_CFG.get("BUY_SCORE_THRESHOLD", 28)),  # 显著放宽综合分门槛，先确保BUY信号能产出
     "HOLDING_PERIOD_HOURS": 72,     # 最小持有期（小时）
     "BUY_COOLDOWN_MINUTES": 120,# 同一商品信号冷却时间
     "MAX_BUY_PER_HOUR": 15,     # 每小时最多记录 BUY 数
-    "TAKE_PROFIT_RATE": 0.08,   # 持仓止盈阈值
-    "STOP_LOSS_RATE": -0.05,    # 持仓止损阈值
+    "TAKE_PROFIT_RATE": float(ACTIVE_STRATEGY_CFG.get("TAKE_PROFIT_RATE", 0.08)),   # 持仓止盈阈值
+    "STOP_LOSS_RATE": float(ACTIVE_STRATEGY_CFG.get("STOP_LOSS_RATE", -0.05)),    # 持仓止损阈值
     
     # --- 运行逻辑配置 ---
     "BATCH_SIZE": 50,           # 每次批量请求 50 个饰品
@@ -61,9 +81,9 @@ CONFIG = {
     "DINGTALK_REPORT_INTERVAL_SECONDS": int(os.getenv("DINGTALK_REPORT_INTERVAL_SECONDS", "900")),
 
     # --- 文件与数据库 ---
-    "DB_NAME": os.path.join(ROOT_DIR, "cs2_quant.db"),
-    "BLACKLIST_FILE": os.path.join(ROOT_DIR, "low_sales_blacklist.txt"),
-    "LOG_FILE": os.path.join(ROOT_DIR, "opportunities.csv")
+    "DB_NAME": os.path.join(ROOT_DIR, "shared_data", "cs2_quant.db"),
+    "BLACKLIST_FILE": os.path.join(ROOT_DIR, "shared_data", "low_sales_blacklist.txt"),
+    "LOG_FILE": os.path.join(ROOT_DIR, "shared_data", "opportunities.csv")
 
 
 }

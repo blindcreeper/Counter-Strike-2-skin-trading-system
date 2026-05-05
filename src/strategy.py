@@ -282,7 +282,7 @@ class QuantStrategy:
         # Hard risk control from observed weak zones.
         buy_from = str(trade_ctx.get("buy_from", "")).upper()
         sell_to = str(trade_ctx.get("sell_to", "")).upper()
-        if (buy_from, sell_to) == ("C5", "HALOSKINS") and estimated_net_return < 0.09:
+        if (buy_from, sell_to) == ("C5", "HALOSKINS") and estimated_net_return < 0.03:
             return {
                 "action": "HOLD",
                 "score": composite_score,
@@ -295,7 +295,7 @@ class QuantStrategy:
                 "msg": "C5->HALOSKINS 组合仅保留高净利样本",
             }
 
-        if (buy_from, sell_to) == ("C5", "BUFF") and estimated_net_return < 0.07:
+        if (buy_from, sell_to) == ("C5", "BUFF") and estimated_net_return < 0.02:
             return {
                 "action": "HOLD",
                 "score": composite_score,
@@ -308,7 +308,7 @@ class QuantStrategy:
                 "msg": "C5->BUFF 组合仅保留高净利样本",
             }
 
-        if self._safe_float(trade_ctx.get("buy_price"), 0.0) >= 1500 and estimated_net_return < 0.08:
+        if self._safe_float(trade_ctx.get("buy_price"), 0.0) >= 1500 and estimated_net_return < 0.0:
             return {
                 "action": "HOLD",
                 "score": composite_score,
@@ -321,7 +321,7 @@ class QuantStrategy:
                 "msg": "高价品需更高净利空间(>=8%)",
             }
 
-        if changes >= 7 and estimated_net_return < 0.08:
+        if changes >= 7 and estimated_net_return < 0.0:
             return {
                 "action": "HOLD",
                 "score": composite_score,
@@ -334,7 +334,7 @@ class QuantStrategy:
                 "msg": "近期变价过于频繁，先观察",
             }
 
-        min_trend = max(self.config.get("FEE_RATE", 0.025) + 0.02, 0.045)
+        min_trend = 0.0
         if slope >= min_trend and composite_score >= self.buy_score_threshold:
             return {
                 "action": "BUY",

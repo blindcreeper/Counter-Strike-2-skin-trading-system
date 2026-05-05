@@ -9,20 +9,10 @@ services:
     
     # 环境变量
     environment:
-      # API 配置
-      SDT_KEY: ${SDT_KEY:-your_sdt_key}
-      CSQAQ_TOKEN: ${CSQAQ_TOKEN:-your_csqaq_token}
-      
       # 状态服务端口
       STATUS_HOST: "0.0.0.0"
       STATUS_PORT: "8199"
-      
-      # 回测配置
-      INITIAL_BALANCE: ${INITIAL_BALANCE:-10000}
-      FEE_RATE: ${FEE_RATE:-0.025}
-      MIN_PROFIT_RATE: ${MIN_PROFIT_RATE:-0.03}
-      HOLDING_PERIOD_HOURS: ${HOLDING_PERIOD_HOURS:-72}
-      
+
       # Python 编码
       PYTHONUNBUFFERED: 1
       PYTHONIOENCODING: utf-8
@@ -34,14 +24,16 @@ services:
     
     # 数据卷挂载
     volumes:
+      # 共享数据目录（scanner 写入，scheduler 读取）
+      - ./shared_data:/app/shared_data
+
       # 输出结果映射到主机
       - ./output/backtest_results:/app/output/backtest_results
       - ./output/backtest_logs:/app/output/backtest_logs
-      - ./logs:/app/logs
-      
+
       # 数据文件（可选，若想动态更新）
       - ./data:/app/data
-      
+
       # 心跳文件（宿主机可查看）
       - ./heartbeat.json:/app/heartbeat.json
     
@@ -60,11 +52,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2'
+          cpus: '1'
           memory: 2G
         reservations:
-          cpus: '1'
-          memory: 1G
+          cpus: '0.5'
+          memory: 512M
     
     # 日志驱动
     logging:
@@ -88,10 +80,9 @@ services:
       PYTHONUNBUFFERED: 1
       PYTHONIOENCODING: utf-8
       TZ: Asia/Shanghai
-      SDT_KEY: ${SDT_KEY:-your_sdt_key}
-      CSQAQ_TOKEN: ${CSQAQ_TOKEN:-your_csqaq_token}
     
     volumes:
+      - ./shared_data:/app/shared_data
       - ./output/backtest_results:/app/output/backtest_results
       - ./output/backtest_logs:/app/output/backtest_logs
       - ./data:/app/data

@@ -75,6 +75,14 @@ def view_history():
     system.view_backtest_statistics(days=7)
 
 
+def quick_auto_tune():
+    system = CompleteBacktestSystem()
+    print("\n" + "="*70)
+    print("🧠 自动调参模式 - 执行小规模参数搜索".center(70))
+    print("="*70 + "\n")
+    return system.run_auto_tune(trials=8, hours_back=72, initial_balance=10000)
+
+
 if __name__ == "__main__":
     import sys
     
@@ -87,12 +95,15 @@ if __name__ == "__main__":
             quick_backtest_extended()
         elif cmd == 'history':
             view_history()
+        elif cmd == 'tune':
+            quick_auto_tune()
         else:
-            print("用法: python backtest_quick.py [quick|extended|history|auto]")
+            print("用法: python backtest_quick.py [quick|extended|history|tune|auto]")
             print("")
             print("quick    - 快速回测72小时数据")
             print("extended - 扩展回测7天数据")
             print("history  - 查看回测历史")
+            print("tune     - 小规模自动调参")
     else:
         # 默认执行快速回测
         quick_backtest()

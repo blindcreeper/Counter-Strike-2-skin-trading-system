@@ -48,6 +48,7 @@ class ScanStats:
                 "last_error": None,
                 "last_error_time": None,
                 "last_buy_signal": None,
+                "recent_buy_signals": [],
                 "recent_items": [],
             }
 
@@ -93,13 +94,17 @@ class ScanStats:
                 self.state["errors"] += 1
 
             if action == "BUY":
-                self.state["last_buy_signal"] = {
+                buy_entry = {
                     "time": datetime.now().isoformat(),
                     "name": name[:60],
                     **{k: v for k, v in kwargs.items() if k in (
                         "buy_price", "sell_price", "profit_rate", "score"
                     )},
                 }
+                self.state["last_buy_signal"] = buy_entry
+                self.state["recent_buy_signals"] = (
+                    [buy_entry] + self.state.get("recent_buy_signals", [])
+                )[:10]
 
             entry = {
                 "name": name[:40],

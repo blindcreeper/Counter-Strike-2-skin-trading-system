@@ -97,6 +97,16 @@ def notify_scan_report(stats_snapshot):
             f"- {str(last_buy.get('name', '-'))[:35]} | 分数:{last_buy.get('score', '-')} | 时间:{str(last_buy.get('time', '-'))[:16]}"
         )
 
+    recent_buys = s.get("recent_buy_signals", [])[:5]
+    if recent_buys:
+        lines.append("")
+        lines.append("本轮BUY明细:")
+        for item in recent_buys:
+            lines.append(
+                f"- {str(item.get('name', '-'))[:28]} | 买:{item.get('buy_price', '-')} 卖:{item.get('sell_price', '-')} | "
+                f"垫:{item.get('profit_rate', '-')} | 分:{item.get('score', '-')}"
+            )
+
     lines.append("")
     lines.append("http://38.207.171.210:8199/")
     return _send("\r\n".join(lines))
