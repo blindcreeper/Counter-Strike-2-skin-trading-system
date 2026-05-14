@@ -106,8 +106,27 @@ class MarketAPI:
                 data = res.json()
                 if data.get("success"):
                     return data["data"].get("avgPrice", 0)
-        except: pass
+        except Exception:
+            pass
         return 0
+
+    def get_kline(self, name, kline_type=2):
+        """
+        [SteamDT] 获取K线历史数据
+        kline_type: 1=时K, 2=日K, 3=周K
+        Returns: list of [timestamp, close, open, high, low]
+        Rate limit: 120/min
+        """
+        url = f"{self.sdt_base}/open/cs2/item/v1/kline"
+        payload = {"marketHashName": name, "type": kline_type}
+        try:
+            res = requests.post(url, json=payload, headers=self.sdt_headers, timeout=15)
+            data = res.json()
+            if data.get("success"):
+                return data.get("data", [])
+        except Exception as e:
+            print(f"[!] kline请求失败 {name[:30]}: {e}")
+        return []
 
     def get_batch_sdt(self, names):
         """[SteamDT] 批量获取当前最低价"""
@@ -117,7 +136,8 @@ class MarketAPI:
             res = requests.post(url, json=payload, headers=self.sdt_headers, timeout=20)
             data = res.json()
             return data.get("data", []) if data.get("success") else []
-        except: return []
+        except Exception:
+            return []
 
     def get_batch_csqaq(self, names):
         """[CSQAQ] 批量获取参考价"""

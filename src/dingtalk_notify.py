@@ -7,11 +7,7 @@ import requests
 
 from database import MarketDB
 
-WEBHOOK = os.getenv(
-    "DINGTALK_WEBHOOK",
-    "https://oapi.dingtalk.com/robot/send?access_token="
-    "99fcd1e51e476655d047eada2738de4cdd9aa16cb2eb5b6a905fa6a1d4c0aa3b",
-)
+WEBHOOK = os.getenv("DINGTALK_WEBHOOK", "")
 SECRET_WORD = "ding"
 
 
@@ -112,17 +108,42 @@ def notify_scan_report(stats_snapshot):
     return _send("\r\n".join(lines))
 
 
-def notify_buy_signal(name, buy_price, sell_price, edge_rate, score, estimated_net_return=None, factor_text=""):
+def notify_buy_signal(name, buy_price, sell_price, edge_rate, score,
+                      estimated_net_return=None, factor_text="",
+                      buy_platform=None, trend_score=None):
+    trend_str = f"趋势评分: {trend_score:.1f}" if trend_score is not None else "趋势评分: -"
+    buy_plat_str = f"买入平台: {buy_platform}" if buy_platform else ""
     lines = [
-        f"{SECRET_WORD} CS2 BUY信号!",
+        f"{SECRET_WORD} CS2 趋势买入信号!",
         "",
         f"商品: {name[:50]}",
-        f"买价: {buy_price:.1f}",
-        f"卖价: {sell_price:.1f}",
-        f"价差因子: {edge_rate:.2%}",
-        f"安全垫: {estimated_net_return:.2%}" if estimated_net_return is not None else "安全垫: -",
+    ]
+    if buy_plat_str:
+        lines.append(buy_plat_str)
+    lines.extend([
+        f"买入价: {buy_price:.1f}",
+        f"参考卖价: {sell_price:.1f}",
+        trend_str,
         f"综合分: {score}",
-        f"因子摘要: {factor_text[:80]}" if factor_text else "因子摘要: -",
+        f"价差: {edge_rate:.2%}",
+        f"因子: {factor_text[:80]}" if factor_text else "因子: -",
+        "",
+        f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+    ])
+    return _send("\r\n".join(lines))
+
+
+def notify_simulated_sell(name, entry_price, sell_price, net_return, holding_hours, reason):
+    result = "盈利" if net_return > 0 else "亏损"
+    lines = [
+        f"{SECRET_WORD} CS2 虚拟交易结算",
+        "",
+        f"商品: {name[:50]}",
+        f"买入价: {entry_price:.1f}",
+        f"卖出价: {sell_price:.1f}",
+        f"净收益: {net_return:.2%} ({result})",
+        f"持仓时长: {holding_hours:.0f}小时",
+        f"平仓原因: {reason}",
         "",
         f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
     ]

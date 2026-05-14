@@ -7,14 +7,14 @@ from collections import deque
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from config import CONFIG
+from config import CONFIG, RUN_MODE
 from api_client import MarketAPI
 from database import MarketDB
 from execution_engine import ExecutionEngine
 from strategy import QuantStrategy
 from scan_stats import ScanStats
 from status_server import start_status_server
-from dingtalk_notify import notify_buy_signal, notify_error, notify_scan_report
+from dingtalk_notify import notify_buy_signal, notify_error, notify_scan_report, notify_simulated_sell
 
 # --- 1. Core init ---
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -22,6 +22,7 @@ api = MarketAPI(CONFIG["SDT_KEY"], CONFIG["CSQAQ_TOKEN"])
 db = MarketDB(CONFIG["DB_NAME"])
 executor = ExecutionEngine(db, CONFIG)
 strat = QuantStrategy(CONFIG)
+db.ensure_simulated_sell_columns()
 
 # --- Status monitoring ---
 heartbeat_path = os.path.join(
@@ -30,7 +31,7 @@ heartbeat_path = os.path.join(
 stats = ScanStats(heartbeat_path=heartbeat_path)
 STATUS_HOST = CONFIG.get("STATUS_HOST", "0.0.0.0")
 STATUS_PORT = int(CONFIG.get("STATUS_PORT", 8199))
-start_status_server(stats, host=STATUS_HOST, port=STATUS_PORT)
+start_status_server(stats, host=STATUS_HOST, port=STATUS_PORT, db=db)
 last_report_ts = 0
 
 
@@ -172,6 +173,7 @@ def log_opportunity(data):
         "time", "name", "price", "buy_from", "sell_to",
         "buy_price", "sell_price", "profit",
         "slope", "hurst", "er", "changes", "score1", "score2", "score",
+        "trend_score",
     ]
     file_exists = os.path.isfile(log_file)
     with open(log_file, "a", newline="", encoding="utf-8") as f:
@@ -216,6 +218,7 @@ def run():
 
         batch_size = CONFIG["BATCH_SIZE"]
         total_batches = (len(active_names) + batch_size - 1) // batch_size
+        round_price_map = {}
 
         for i in range(0, len(active_names), batch_size):
             batch = active_names[i:i + batch_size]
@@ -229,6 +232,7 @@ def run():
 
             sdt_item_map = build_sdt_item_map(sdt_prices)
 
+            # Extract prices from both APIs
             for item in sdt_prices:
                 n = item.get("marketHashName", "")
                 p = item.get("lowestPrice")
@@ -236,13 +240,19 @@ def run():
                     price_map.setdefault(n, {})["悠悠"] = float(p)
 
             for n, info in csqaq_prices.items():
-                p = info.get("sell_price") or info.get("price")
-                if p:
-                    price_map.setdefault(n, {})["Buff"] = float(p)
+                if not isinstance(info, dict):
+                    continue
+                yyyp = info.get("yyypSellPrice")
+                buff = info.get("buffSellPrice") or info.get("sell_price") or info.get("price")
+                if yyyp:
+                    price_map.setdefault(n, {})["悠悠"] = float(yyyp)
+                if buff:
+                    price_map.setdefault(n, {})["Buff"] = float(buff)
+
+            round_price_map.update(price_map)
 
             for name in batch:
                 try:
-                    stats.record_seen()
                     platforms = price_map.get(name)
                     if not platforms:
                         continue
@@ -255,16 +265,93 @@ def run():
                     if not buy_price or not sell_price:
                         continue
 
-                    stats.record_quote()
+                    # collect 模式：跳过所有过滤，广撒网采集数据
+                    if RUN_MODE == "collect":
+                        platform_fee_rate = CONFIG.get("PLATFORM_FEE_RATE", 0.025)
+                        price_edge_rate = (sell_price - buy_price) / buy_price
+                        buy_fee = buy_price * platform_fee_rate
+                        sell_fee = sell_price * platform_fee_rate
+                        estimated_net_profit = (sell_price - buy_price) - buy_fee - sell_fee
+                        estimated_net_return = estimated_net_profit / buy_price if buy_price > 0 else 0
+                        sales = 0
+                        csqaq_info = csqaq_prices.get(name, {})
+                        if isinstance(csqaq_info, dict):
+                            sales = csqaq_info.get("buffSellNum") or csqaq_info.get("sales_24h", 0) or 0
+                        series_id = extract_series_id(sdt_item_map.get(name, {}), csqaq_info)
+                        db.save_item_snapshot(name, buy_price, sales, series_id=series_id)
+                        analysis_data = db.get_item_analysis_data(name)
+                        report = strat.analyze(
+                            analysis_data,
+                            collect_mode=True,
+                            trade_ctx={
+                                "name": name,
+                                "buy_price": buy_price,
+                                "sell_price": sell_price,
+                                "buy_from": "悠悠",
+                                "sell_to": "Buff",
+                                "sales": sales,
+                                "estimated_net_return": estimated_net_return,
+                                "net_profit_rate": estimated_net_return,
+                                "price_edge_rate": price_edge_rate,
+                                "cross_platform_spread": price_edge_rate,
+                            },
+                        )
+                        action = report.get("action", "HOLD")
+                        status_map = {"WAIT": "⏳", "BUY": "💎", "SELL": "🔻", "HOLD": "⚖", "SKIP": "⏸"}
+                        status = status_map.get(action, "⚖")
+                        print(
+                            f"{status} {name[:30]:<30} | 买{buy_price:>8.1f} 卖{sell_price:>8.1f} | "
+                            f"价差:{price_edge_rate:>7.2%} 净利:{estimated_net_return:>7.2%} | "
+                            f"SCR:{report.get('score', '-')!s:>6} | {report.get('msg', '')}"
+                        )
+                        signal_payload = {
+                            "signal_time": int(time.time()),
+                            "hash_name": name,
+                            "action": action,
+                            "buy_price": buy_price,
+                            "sell_price": sell_price,
+                            "sales_24h": sales,
+                            "price_edge_rate": price_edge_rate,
+                            "estimated_net_return": estimated_net_return,
+                            "score": report.get("score"),
+                            "score1": report.get("score1"),
+                            "score2": report.get("score2"),
+                            "slope": report.get("slope"),
+                            "er": report.get("er"),
+                            "hurst": report.get("hurst"),
+                            "changes": report.get("changes"),
+                            "series_id": series_id,
+                            "signal_meta": {
+                                "buy_from": "悠悠",
+                                "sell_to": "Buff",
+                                "message": report.get("msg", ""),
+                            },
+                        }
+                        signal_id, position = executor.on_signal(name, action, signal_payload)
+                        stats.record_item(
+                            name,
+                            action,
+                            score=report.get("score"),
+                            buy_price=buy_price,
+                            sell_price=sell_price,
+                            profit_rate=estimated_net_return,
+                        )
+                        if action == "BUY":
+                            notify_buy_signal(
+                                name, buy_price, sell_price,
+                                estimated_net_return, report.get("score", 0),
+                            )
+                        continue
 
-                    if buy_price < CONFIG["MIN_PRICE"] or buy_price > CONFIG["MAX_PRICE"]:
+                    # trade 模式：趋势预测逻辑（用策略内的价格过滤替代硬编码限制）
+                    if buy_price > CONFIG["MAX_PRICE"]:
                         stats.record_skip("price")
                         continue
 
                     sales = 0
                     csqaq_info = csqaq_prices.get(name, {})
                     if isinstance(csqaq_info, dict):
-                        sales = csqaq_info.get("sales_24h", 0) or 0
+                        sales = csqaq_info.get("buffSellNum") or csqaq_info.get("sales_24h", 0) or 0
 
                     if sales < CONFIG["MIN_SALES_24H"]:
                         if sales < CONFIG["MIN_SALES_24H"] // 2:
@@ -278,27 +365,28 @@ def run():
                         stats.record_skip("blacklist")
                         continue
 
-                    # UU platform fee calculation
+                    # 动态选择买入平台：哪个便宜买哪个
+                    yyyp_p = platforms.get("悠悠")
+                    buff_p = platforms.get("Buff")
+                    if yyyp_p and buff_p and float(yyyp_p) <= float(buff_p):
+                        buy_plat, buy_price = "悠悠", float(yyyp_p)
+                        sell_plat, sell_price = "Buff", float(buff_p)
+                    elif buff_p:
+                        buy_plat, buy_price = "Buff", float(buff_p)
+                        sell_plat = "悠悠"
+                        sell_price = float(yyyp_p) if yyyp_p else float(buff_p)
+                    else:
+                        buy_plat, buy_price = "悠悠", float(yyyp_p)
+                        sell_plat = "Buff"
+                        sell_price = float(buff_p) if buff_p else float(yyyp_p)
+
+                    # 价差因子（作为辅助信号，不作为硬过滤）
                     platform_fee_rate = CONFIG.get("PLATFORM_FEE_RATE", 0.025)
-
                     price_edge_rate = (sell_price - buy_price) / buy_price
-                    if price_edge_rate <= CONFIG.get("MIN_EDGE_SCORE", 0.02):
-                        stats.record_skip("edge")
-                        continue
-
-                    # UU platform: buy fee + sell fee
                     buy_fee = buy_price * platform_fee_rate
                     sell_fee = sell_price * platform_fee_rate
                     estimated_net_profit = (sell_price - buy_price) - buy_fee - sell_fee
                     estimated_net_return = estimated_net_profit / buy_price if buy_price > 0 else 0
-
-                    if estimated_net_return <= CONFIG.get("MIN_NET_PROFIT_RATE", 0.02):
-                        print(
-                            f"⏳ {name[:30]:<30} | 价差因子{price_edge_rate:>7.2%} 安全垫{estimated_net_return:>7.2%} | "
-                            f"未达安全垫门槛({CONFIG.get('MIN_NET_PROFIT_RATE', 0.02):.2%})"
-                        )
-                        stats.record_skip("cushion")
-                        continue
 
                     sdt_item = sdt_item_map.get(name, {})
                     series_id = extract_series_id(sdt_item, csqaq_info)
@@ -307,8 +395,11 @@ def run():
 
                     print(
                         f"🔍 {name[:30]:<30} | {buy_plat}->{sell_plat} | "
-                        f"买{buy_price:.1f} 卖{sell_price:.1f} | 价差因子:{price_edge_rate:>7.2%}"
+                        f"买{buy_price:.1f} 卖{sell_price:.1f} | 价差:{price_edge_rate:>7.2%}"
                     )
+
+                    # Fetch daily K-line for trend prediction
+                    kline = api.get_kline(name, kline_type=2)
 
                     report = strat.analyze(
                         analysis_data,
@@ -323,14 +414,16 @@ def run():
                             "net_profit_rate": estimated_net_return,
                             "price_edge_rate": price_edge_rate,
                             "cross_platform_spread": price_edge_rate,
+                            "kline": kline,
                         },
                     )
                     action = report.get("action", "WAIT")
                     status_map = {"WAIT": "⏳", "BUY": "💎", "SELL": "🔻", "HOLD": "⚖", "SKIP": "⏸"}
                     status = status_map.get(action, "⚖")
+                    trend_str = f"T:{report.get('trend_score', '-'):>5}"
                     print(
-                        f"{status} {name[:30]:<30} | 买价{buy_price:>8.1f} | 销量{sales:>3} | "
-                        f"S1:{report.get('score1', '-')!s:>6} S2:{report.get('score2', '-')!s:>6} SCR:{report.get('score', '-')!s:>6} | {report.get('msg', '')}"
+                        f"{status} {name[:30]:<30} | {buy_plat}买{buy_price:>8.1f} | 销量{sales:>3} | "
+                        f"S1:{report.get('score1', '-')!s:>6} {trend_str} | {report.get('msg', '')}"
                     )
 
                     signal_payload = {
@@ -356,6 +449,24 @@ def run():
                             "message": report.get("msg", ""),
                         },
                     }
+                    # Cooldown/throttle check before recording signal
+                    if action == "BUY":
+                        now_ts = time.time()
+                        while recent_buy_times and now_ts - recent_buy_times[0] > 3600:
+                            recent_buy_times.popleft()
+
+                        last_buy_ts = recent_buy_by_name.get(name)
+                        if last_buy_ts and now_ts - last_buy_ts < buy_cooldown_sec:
+                            cooldown_left = int((buy_cooldown_sec - (now_ts - last_buy_ts)) / 60)
+                            print(f"⏳{name[:30]:<30} | 冷却中，剩余约{max(cooldown_left, 1)} 分钟")
+                            stats.record_cooldown()
+                            continue
+
+                        if len(recent_buy_times) >= max_buy_per_hour:
+                            print(f"⏳BUY 节流触发：近1小时已达上限({max_buy_per_hour})，跳过{name[:30]}")
+                            stats.record_throttle()
+                            continue
+
                     signal_id, position = executor.on_signal(name, action, signal_payload)
                     if action != "BUY":
                         executor.maybe_close_position(name, sell_price)
@@ -378,30 +489,15 @@ def run():
                             report.get("score"),
                             estimated_net_return=estimated_net_return,
                             factor_text=report.get("msg", ""),
+                            buy_platform=buy_plat,
+                            trend_score=report.get("trend_score"),
                         )
-                        now_ts = time.time()
-                        while recent_buy_times and now_ts - recent_buy_times[0] > 3600:
-                            recent_buy_times.popleft()
-
-                        last_buy_ts = recent_buy_by_name.get(name)
-                        if last_buy_ts and now_ts - last_buy_ts < buy_cooldown_sec:
-                            cooldown_left = int((buy_cooldown_sec - (now_ts - last_buy_ts)) / 60)
-                            print(f"⏳{name[:30]:<30} | 冷却中，剩余约{max(cooldown_left, 1)} 分钟")
-                            stats.record_cooldown()
-                            continue
-
-                        if len(recent_buy_times) >= max_buy_per_hour:
-                            print(f"⏳BUY 节流触发：近1小时已达上限({max_buy_per_hour})，跳过{name[:30]}")
-                            stats.record_throttle()
-                            continue
-
                         log_opportunity({
                             "time": datetime.now().strftime("%m-%d %H:%M:%S"),
                             "name": name,
                             "price": buy_price,
                             "buy_from": buy_plat,
                             "sell_to": sell_plat,
-                            "buy_price": buy_price,
                             "sell_price": sell_price,
                             "profit": f"{price_edge_rate:.2%}",
                             "slope": report.get("slope"),
@@ -410,6 +506,7 @@ def run():
                             "changes": report.get("changes"),
                             "score1": report.get("score1"),
                             "score2": report.get("score2"),
+                            "trend_score": report.get("trend_score"),
                         })
                         recent_buy_by_name[name] = now_ts
                         recent_buy_times.append(now_ts)
@@ -429,6 +526,17 @@ def run():
             time.sleep(62)
 
         stats.finish_round()
+
+        # 检查所有持仓：更新价格，到期自动虚拟卖出
+        closed_positions = executor.check_all_positions(round_price_map)
+        for cp in closed_positions:
+            print(f"📊 虚拟卖出: {cp['name'][:30]} | 买{cp['entry_price']:.1f}->卖{cp['sell_price']:.1f} | "
+                  f"收益:{cp['net_return']:.2%} | 持仓{cp['holding_hours']:.0f}h | 原因:{cp['reason']}")
+            notify_simulated_sell(
+                cp['name'], cp['entry_price'], cp['sell_price'],
+                cp['net_return'], cp['holding_hours'], cp['reason']
+            )
+
         notify_scan_report(stats.get_snapshot())
         print(f"\n✅轮次结束，休眠{CONFIG['SLEEP_TIME']}s...")
         time.sleep(CONFIG["SLEEP_TIME"])

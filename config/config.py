@@ -42,6 +42,9 @@ def _resolve_active_strategy_config():
 
 ACTIVE_STRATEGY_CFG = _resolve_active_strategy_config()
 
+# 运行模式: "collect" = 数据采集(跳过过滤，广撒网记录) | "trade" = 正常交易(按策略过滤)
+RUN_MODE = APP_CFG.get("mode", "trade")
+
 CONFIG = {
     # --- 鉴权信息 ---
     # 优先级：环境变量 > app_config.json > 默认值（便于本地调试）
@@ -60,7 +63,8 @@ CONFIG = {
     "MIN_ER": 0.6,              # 价格效率比(0.6以上代表走势足够平滑，不是乱跳)
     "MIN_HURST": 0.17,          # Hurst 指数门槛
     "BUY_SCORE_THRESHOLD": int(ACTIVE_STRATEGY_CFG.get("BUY_SCORE_THRESHOLD", 28)),  # 显著放宽综合分门槛，先确保BUY信号能产出
-    "HOLDING_PERIOD_HOURS": 72,     # 最小持有期（小时）
+    "TREND_SCORE_THRESHOLD": float(ACTIVE_STRATEGY_CFG.get("TREND_SCORE_THRESHOLD", 50)),
+    "HOLDING_PERIOD_HOURS": int(ACTIVE_STRATEGY_CFG.get("HOLDING_PERIOD_HOURS", 168)),
     "BUY_COOLDOWN_MINUTES": 120,# 同一商品信号冷却时间
     "MAX_BUY_PER_HOUR": 15,     # 每小时最多记录 BUY 数
     "TAKE_PROFIT_RATE": float(ACTIVE_STRATEGY_CFG.get("TAKE_PROFIT_RATE", 0.08)),   # 持仓止盈阈值

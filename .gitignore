@@ -118,3 +118,9 @@ package-lock.json
 
 # Docker
 .dockerignore
+
+# Local tools / temp output
+.playwright-cli/
+output/
+check_bt.py
+heartbeat.json

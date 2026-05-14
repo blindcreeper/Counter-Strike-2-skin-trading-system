@@ -65,7 +65,10 @@ class MarketDB:
                     max_return_24h REAL,
                     max_return_72h REAL,
                     max_return_168h REAL,
-                    evaluated_at INTEGER
+                    evaluated_at INTEGER,
+                    simulated_sell_price REAL,
+                    simulated_return REAL,
+                    simulated_sell_time INTEGER
                 )
             ''')
 
@@ -388,3 +391,42 @@ class MarketDB:
             cursor.execute(query, params)
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
+
+    def get_all_open_positions(self):
+        with sqlite3.connect(self.db_name) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT position_id, hash_name, status, quantity, entry_time,
+                       entry_price, last_price, last_mark_time,
+                       take_profit_rate, stop_loss_rate, max_holding_hours,
+                       signal_id, notes
+                FROM positions WHERE status = 'OPEN'
+            ''')
+            return [dict(row) for row in cursor.fetchall()]
+
+    def update_signal_simulated_sell(self, signal_id, sell_price, simulated_return, sell_time):
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE signal_events
+                SET simulated_sell_price = ?,
+                    simulated_return = ?,
+                    simulated_sell_time = ?
+                WHERE signal_id = ?
+            ''', (sell_price, simulated_return, sell_time, signal_id))
+            conn.commit()
+
+    def ensure_simulated_sell_columns(self):
+        """Add simulated sell columns if missing."""
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(signal_events)")
+            existing = {row[1] for row in cursor.fetchall()}
+            if "simulated_sell_price" not in existing:
+                cursor.execute("ALTER TABLE signal_events ADD COLUMN simulated_sell_price REAL")
+            if "simulated_return" not in existing:
+                cursor.execute("ALTER TABLE signal_events ADD COLUMN simulated_return REAL")
+            if "simulated_sell_time" not in existing:
+                cursor.execute("ALTER TABLE signal_events ADD COLUMN simulated_sell_time INTEGER")
+            conn.commit()
