@@ -104,6 +104,9 @@ class ExecutionEngine:
 
         for pos in positions:
             name = pos["hash_name"]
+            entry_price = float(pos["entry_price"])
+            holding_hours = (now_ts - int(pos["entry_time"])) / 3600
+
             # Try to find current price from scan data
             platforms = current_prices_map.get(name)
             if isinstance(platforms, dict):
@@ -113,8 +116,12 @@ class ExecutionEngine:
             else:
                 current_price = float(pos["last_price"])
 
-            entry_price = float(pos["entry_price"])
-            holding_hours = (now_ts - int(pos["entry_time"])) / 3600
+            # 价格从未更新过（last_price == entry_price）且不在当前扫描范围：
+            # 跳过平仓，等下一轮扫描拿到真实价格再处理
+            if abs(current_price - entry_price) < 0.01 and name not in current_prices_map:
+                self.mark_position(name, current_price, note="stale_waiting")
+                continue
+
             gross_return = (current_price - entry_price) / entry_price if entry_price > 0 else 0
             net_return = gross_return - (2 * self.fee_rate)
 
