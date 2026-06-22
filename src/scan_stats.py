@@ -33,6 +33,7 @@ class ScanStats:
                 "items_with_quotes": 0,
                 "items_scanned": 0,
                 "items_skipped_price": 0,
+                "items_skipped_min_price": 0,
                 "items_skipped_sales": 0,
                 "items_skipped_blacklist": 0,
                 "items_skipped_edge": 0,
@@ -55,7 +56,8 @@ class ScanStats:
     def start_round(self, round_num, total_items):
         with self._lock:
             self.state["status"] = "scanning"
-            self.state["started_at"] = datetime.now().isoformat()
+            if self.state["started_at"] is None:
+                self.state["started_at"] = datetime.now().isoformat()
             self.state["round_count"] = round_num
             self.state["current_round"] = round_num
             self.state["items_seen"] = 0

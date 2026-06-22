@@ -339,13 +339,21 @@ def run():
                         if action == "BUY":
                             notify_buy_signal(
                                 name, buy_price, sell_price,
-                                estimated_net_return, report.get("score", 0),
+                                price_edge_rate, report.get("score", 0),
+                                estimated_net_return=estimated_net_return,
+                                factor_text=report.get("msg", ""),
+                                buy_platform="悠悠",
+                                trend_score=report.get("trend_score"),
                             )
                         continue
 
                     # trade 模式：趋势预测逻辑（用策略内的价格过滤替代硬编码限制）
                     if buy_price > CONFIG["MAX_PRICE"]:
                         stats.record_skip("price")
+                        continue
+
+                    if buy_price < CONFIG.get("MIN_PRICE", 30):
+                        stats.record_skip("min_price")
                         continue
 
                     sales = 0

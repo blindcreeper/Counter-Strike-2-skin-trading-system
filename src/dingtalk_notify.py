@@ -7,7 +7,20 @@ import requests
 
 from database import MarketDB
 
-WEBHOOK = os.getenv("DINGTALK_WEBHOOK", "")
+
+def _load_webhook():
+    webhook = os.getenv("DINGTALK_WEBHOOK", "")
+    if webhook:
+        return webhook
+    try:
+        with open(os.path.join(os.path.dirname(__file__), "..", "config", "app_config.json"), "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        return cfg.get("notification", {}).get("dingtalk_webhook", "")
+    except Exception:
+        return ""
+
+
+WEBHOOK = _load_webhook()
 SECRET_WORD = "ding"
 
 
@@ -29,7 +42,8 @@ def _send(content):
 
 
 def _build_scan_extras():
-    db_path = os.path.join(os.path.dirname(__file__), "..", "cs2_quant.db")
+    from config import CONFIG
+    db_path = CONFIG.get("DB_NAME", os.path.join(os.path.dirname(__file__), "..", "shared_data", "cs2_quant.db"))
     open_positions = 0
     pending_evals = 0
     try:

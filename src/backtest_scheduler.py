@@ -7,7 +7,10 @@ import time
 from datetime import datetime
 import threading
 import os
+import sys
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "scripts"))
 from analyze_signal_factors import analyze_signal_factors
 
 
@@ -158,7 +161,24 @@ class BacktestRunner:
                     email_config['smtp']
                 )
             
-            # 7. 发送钉钉通知
+            # 7. 生成 HTML 回测报告 & 获取历史趋势
+            recent = self.db.get_backtest_history(limit=6)[1:]  # 跳过本次
+            html_url = ""
+            try:
+                from backtest_report import generate_html, save_report
+                html = generate_html(
+                    metrics,
+                    trades=self.engine.backtest_results,
+                    history=recent,
+                )
+                _, latest_path = save_report(html)
+                status_port = 8199
+                html_url = f"http://38.207.171.210:{status_port}/backtest"
+                self.notifier.log("INFO", f"📄 HTML 报告: {html_url}")
+            except Exception as e:
+                self.notifier.log("WARN", f"HTML 报告生成失败: {e}")
+
+            # 8. 发送钉钉通知
             if enable_dingtalk and dingtalk_webhook:
                 factor_report = analyze_signal_factors(days=max(7, int(hours_back / 24)))
                 self.notifier.send_dingtalk(
@@ -166,6 +186,8 @@ class BacktestRunner:
                     metrics,
                     trades=self.engine.backtest_results,
                     factor_report=factor_report,
+                    recent_history=recent,
+                    report_url=html_url,
                 )
             
             # 8. 导出报告

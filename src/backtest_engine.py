@@ -14,10 +14,12 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from config import CONFIG
 
+from api_client import MarketAPI
+
+
 # Minimum holding period for backtest (hours)
 def get_holding_period():
     return CONFIG.get("HOLDING_PERIOD_HOURS", 72)
-from api_client import MarketAPI
 
 
 class VirtualAccount:
@@ -192,16 +194,132 @@ class BacktestEngine:
         samples["time"] = samples["time"].dt.strftime("%Y-%m-%d %H:%M:%S")
         return samples.to_dict("records")
     
+    def _get_historical_sell_price(self, name, sell_dt):
+        """从 price_history 表获取 sell_dt 附近的历史价格。
+        数据库保留最近 240 个采样点（约 200 小时），覆盖 7 天锁仓期的回测。
+        """
+        try:
+            from database import MarketDB
+            db_path = CONFIG.get("DB_NAME", "cs2_quant.db")
+            db = MarketDB(db_path)
+            target_ts = int(sell_dt.timestamp())
+            price, actual_ts = db.get_price_near_time(name, target_ts, window_seconds=7200)
+            if price is not None and price > 0:
+                hours_diff = (actual_ts - target_ts) / 3600 if actual_ts else 999
+                if abs(hours_diff) < 24:  # 只接受卖点 ±24 小时内的价格
+                    return price
+        except Exception:
+            pass
+        return None
+
+    def _resolve_sell_price(self, name, buy_price, csv_sell_price_str, latest_sell_prices, sell_dt):
+        """确定卖出价格，优先级：
+        1. CSQAQ 实时 API（模拟"当前卖出"场景）→ 🟢 live
+        2. 数据库历史价格（买入后锁仓期附近的价格）→ 🗄️ hist
+        3. CSV 记录的卖出参考价（BUY 当天 Buff 价）→ 📄 csv
+        4. buy_price × 1.03 估算 → 📝 est
+        """
+        # 1. 实时 API
+        if name in latest_sell_prices:
+            return float(latest_sell_prices[name]), "live"
+
+        # 2. 数据库历史价格
+        hist_price = self._get_historical_sell_price(name, sell_dt)
+        if hist_price is not None and hist_price > 0:
+            return hist_price, "hist"
+
+        # 3. CSV 卖出参考价
+        if csv_sell_price_str and str(csv_sell_price_str).strip() not in ['', 'None']:
+            try:
+                return float(str(csv_sell_price_str).replace('%', '')), "csv"
+            except (ValueError, TypeError):
+                pass
+
+        # 4. 估算
+        return buy_price * 1.03, "est"
+
+    def _get_price_series_for_window(self, name, start_dt, end_dt):
+        """从 price_history 表获取 [start_dt, end_dt] 区间内的价格快照，按时间升序。
+        返回 [(timestamp, price), ...]，可能为空。
+        """
+        try:
+            from database import MarketDB
+            db_path = CONFIG.get("DB_NAME", "cs2_quant.db")
+            db = MarketDB(db_path)
+            start_ts = int(start_dt.timestamp())
+            end_ts = int(end_dt.timestamp())
+            return db.get_price_series_in_range(name, start_ts, end_ts)
+        except Exception:
+            return []
+
+    def _simulate_position(self, name, buy_price, buy_dt, latest_sell_prices, csv_sell_str):
+        """模拟单笔持仓的全生命周期：买入 → 逐日盯市 → 止盈/止损/超时卖出。
+        锁仓期内（< MIN_HOLDING_HOURS）不触发止盈/止损，必须持有至少 72h。
+        返回 (sell_price, sell_dt, sell_reason, reason_detail) 或 None。
+        """
+        fee_rate = CONFIG.get("FEE_RATE", 0.025)
+        take_profit_rate = CONFIG.get("TAKE_PROFIT_RATE", 0.08)
+        stop_loss_rate = CONFIG.get("STOP_LOSS_RATE", -0.05)
+        max_hours = get_holding_period()
+        min_hours = CONFIG.get("MIN_HOLDING_HOURS", 72)  # 最低锁仓 72h
+        max_sell_dt = buy_dt + timedelta(hours=max_hours)
+        unlock_dt = buy_dt + timedelta(hours=min_hours)   # 锁仓解禁时间
+
+        # 1. 获取持仓期间的 DB 历史价格
+        db_prices = self._get_price_series_for_window(name, buy_dt, max_sell_dt)
+
+        # 2. 逐条检查止盈/止损（跳过锁仓期内的价格点）
+        if db_prices:
+            for ts, price in db_prices:
+                if price <= 0:
+                    continue
+                check_dt = datetime.fromtimestamp(ts)
+                # 锁仓期内不检查止盈/止损
+                if check_dt < unlock_dt:
+                    continue
+
+                gross_return = (price - buy_price) / buy_price
+                net_return = gross_return - 2 * fee_rate
+
+                if net_return >= take_profit_rate:
+                    return (price, check_dt, "take_profit",
+                            f"止盈 {check_dt.strftime('%m-%d %H:%M')}")
+                if net_return <= stop_loss_rate:
+                    return (price, check_dt, "stop_loss",
+                            f"止损 {check_dt.strftime('%m-%d %H:%M')}")
+
+        # 3. 未触发 → 超时卖出，用 DB 最新价或 API 价
+        sell_dt = max_sell_dt
+        if db_prices:
+            # 取区间内最后一个价格作为超时卖出价
+            sell_price = float(db_prices[-1][1])
+            price_source = "hist"
+            reason_detail = f"超时 {sell_dt.strftime('%m-%d %H:%M')}"
+        else:
+            sell_price, price_source = self._resolve_sell_price(
+                name, buy_price, csv_sell_str, latest_sell_prices, sell_dt
+            )
+            reason_detail = f"超时(无历史) {sell_dt.strftime('%m-%d %H:%M')}"
+
+        if sell_price <= 0:
+            return None
+
+        return (sell_price, sell_dt, "timeout", reason_detail)
+
     def run_simulation(self, opportunities, initial_balance=10000):
-        """运行完整的虚拟交易模拟"""
+        """运行完整的虚拟交易模拟，含止盈/止损/超时。"""
         self.account = VirtualAccount(initial_balance)
         self.backtest_results = []
+        holding_hours = get_holding_period()
+        take_profit_rate = CONFIG.get("TAKE_PROFIT_RATE", 0.08)
+        stop_loss_rate = CONFIG.get("STOP_LOSS_RATE", -0.05)
 
         print(f"\n🚀 开始虚拟交易模拟")
-        print(f"   初始资金: ¥{initial_balance:.2f}")
+        print(f"   初始资金: ¥{initial_balance:.2f}  锁仓上限: {holding_hours}h")
+        print(f"   止盈: ≥{take_profit_rate:+.0%}  止损: ≤{stop_loss_rate:+.0%}")
         print(f"   模拟交易数: {len(opportunities)}\n")
 
-        # Batch-fetch latest sell prices via CSQAQ API
+        # Batch-fetch current sell prices (用于没有 DB 历史的 fallback)
         unique_names = list({opp.get('name', '') for opp in opportunities if opp.get('name')})
         latest_sell_prices = {}
         if unique_names:
@@ -220,68 +338,105 @@ class BacktestEngine:
                     print(f"⚠️  批量获取价格失败: {e}")
             print(f"   成功获取 {len(latest_sell_prices)} 个商品的当前卖出价\n")
 
-        sell_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        stats = {"take_profit": 0, "stop_loss": 0, "timeout": 0, "skipped": 0}
 
         for i, opp in enumerate(opportunities, 1):
             try:
                 name = opp.get('name', '')
                 buy_price = float(str(opp.get('price', opp.get('buy_price', 0))).replace('%', ''))
-                buy_time = str(opp.get("time") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                buy_time_str = str(opp.get("time") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
-                # Use live sell price from API; fall back to CSV sell_price; last resort +3%
-                if name in latest_sell_prices:
-                    sell_price = latest_sell_prices[name]
-                    price_source = "live"
-                else:
-                    sell_price_str = opp.get('sell_price', '')
-                    if sell_price_str and str(sell_price_str).strip() not in ['', 'None']:
-                        try:
-                            sell_price = float(str(sell_price_str).replace('%', ''))
-                            price_source = "csv"
-                        except:
-                            sell_price = buy_price * 1.03
-                            price_source = "est"
-                    else:
-                        sell_price = buy_price * 1.03
-                        price_source = "est"
+                try:
+                    buy_dt = datetime.strptime(buy_time_str, "%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    buy_dt = datetime.now()
+                    buy_time_str = buy_dt.strftime("%Y-%m-%d %H:%M:%S")
 
-                if sell_price <= 0 or buy_price <= 0:
+                if buy_price <= 0:
                     continue
 
-                # Buy
-                buy_success, msg = self.account.buy(name, quantity=1, price=buy_price, timestamp=buy_time)
+                # 最低价格过滤（< ¥30 的低价品流动性差、手续费占比高）
+                min_price = CONFIG.get("MIN_PRICE", 30)
+                if buy_price < min_price:
+                    stats["skipped"] += 1
+                    continue
+
+                # 模拟持仓生命周期（含止盈/止损/超时）
+                csv_sell_str = opp.get('sell_price', '')
+                result = self._simulate_position(
+                    name, buy_price, buy_dt, latest_sell_prices, csv_sell_str
+                )
+                if result is None:
+                    stats["skipped"] += 1
+                    continue
+
+                sell_price, sell_dt, reason, reason_detail = result
+                sell_time_str = sell_dt.strftime("%Y-%m-%d %H:%M:%S")
+
+                # 固定仓位：每笔投入约 ¥POSITION_SIZE，按价格取整
+                position_size = CONFIG.get("POSITION_SIZE", 500)
+                qty = max(1, round(position_size / buy_price))
+
+                buy_success, msg = self.account.buy(name, quantity=qty, price=buy_price, timestamp=buy_time_str)
                 if not buy_success:
                     continue
 
-                # Sell (using sell_time = now to bypass holding period check for backtest)
-                sell_success, msg = self.account.sell(name, quantity=1, price=sell_price, timestamp=sell_time)
+                sell_success, msg = self.account.sell(name, quantity=qty, price=sell_price, timestamp=sell_time_str)
+                if not sell_success:
+                    print(f"⚠️  {name[:30]} 卖出失败: {msg}")
+                    continue
 
                 fee_cost = buy_price * CONFIG.get("FEE_RATE", 0.025)
                 fee_rev = sell_price * CONFIG.get("FEE_RATE", 0.025)
-                net_profit = (sell_price - buy_price) - fee_cost - fee_rev
+                net_profit = (sell_price - buy_price) - fee_cost - fee_rev  # per unit
                 profit_rate = net_profit / buy_price if buy_price > 0 else 0
+                total_profit = net_profit * qty  # 整笔交易总利润
+                actual_hold_h = round((sell_dt - buy_dt).total_seconds() / 3600, 1)
+
+                # 价格来源标注
+                if reason == "timeout" and "无历史" in reason_detail:
+                    price_source = self._resolve_sell_price(
+                        name, buy_price, csv_sell_str, latest_sell_prices, sell_dt
+                    )[1]
+                elif reason == "timeout":
+                    price_source = "hist"
+                else:
+                    price_source = "hist"  # 止盈/止损都来自 DB 历史价格
 
                 self.backtest_results.append({
                     'name': name,
                     'buy_price': buy_price,
                     'sell_price': sell_price,
-                    'net_profit': net_profit,
-                    'profit_rate': profit_rate,
-                    'timestamp': buy_time,
-                    'buy_time': buy_time,
-                    'sell_time': sell_time,
+                    'net_profit': total_profit,      # 整笔总利润
+                    'profit_rate': profit_rate,       # 单单位收益率
+                    'quantity': qty,
+                    'timestamp': buy_time_str,
+                    'buy_time': buy_time_str,
+                    'sell_time': sell_time_str,
+                    'holding_hours': actual_hold_h,
                     'account_balance': self.account.balance,
                     'price_source': price_source,
+                    'close_reason': reason,
                 })
 
-                src_tag = {"live": "🟢", "csv": "📄", "est": "📝"}.get(price_source, "?")
-                status = "✅" if profit_rate > 0 else "❌"
-                print(f"{status} [{i:3d}] {name[:20]:<20} | 买:{buy_price:7.2f} → 卖:{sell_price:7.2f} {src_tag} | "
-                      f"利润:{profit_rate:7.2%} | 账户:{self.account.balance:10.2f}")
+                stats[reason] = stats.get(reason, 0) + 1
+
+                src_tag = {"live": "🟢", "hist": "🗄️", "csv": "📄", "est": "📝"}.get(price_source, "?")
+                emoji = {"take_profit": "🟢", "stop_loss": "🔴", "timeout": "⏰"}.get(reason, "?")
+                print(f"{emoji} [{i:3d}] {name[:22]:<22} | ×{qty} 买{buy_price:7.2f}→卖{sell_price:7.2f} {src_tag} | "
+                      f"持{actual_hold_h:5.0f}h | {profit_rate:+.1%} ¥{total_profit:+.1f} | {reason_detail}")
 
             except Exception as e:
-                print(f"⚠️  {opp.get('name', 'Unknown')[:30]} 模拟失败: {str(e)[:40]}")
+                print(f"⚠️  {opp.get('name', 'Unknown')[:30]} 模拟失败: {str(e)[:50]}")
                 continue
+
+        # Summary statistics
+        traded = stats["take_profit"] + stats["stop_loss"] + stats["timeout"]
+        skipped = stats.get("skipped", 0)
+        if traded > 0:
+            print(f"\n📊 平仓统计: 🟢止盈{stats['take_profit']} 🔴止损{stats['stop_loss']} "
+                  f"⏰超时{stats['timeout']} | 共{traded}笔"
+                  + (f" | 跳过{skipped}笔(价格<¥{CONFIG.get('MIN_PRICE', 30):.0f}或无数据)" if skipped else ""))
 
         return self._calculate_metrics()
     
@@ -328,8 +483,8 @@ class BacktestEngine:
         best_return = df['profit_rate'].max()
         worst_return = df['profit_rate'].min()
         
-        # 账户曲线
-        df['account_value'] = df['account_balance'] + df['net_profit'].cumsum()
+        # 账户曲线：account_balance 已包含逐笔盈亏，无需再加 cumsum
+        df['account_value'] = df['account_balance']
         account_values = df['account_value'].fillna(self.account.initial_balance).tolist()
         
         # 确保所有值都是有效的数字

@@ -9,10 +9,11 @@ class MarketDB:
         self.init_db()
 
     def init_db(self):
-        """初始化表结构：单品表 + 热门系列表"""
+        """初始化表结构：单品表 + 热门系列表 + 价格历史表"""
         with sqlite3.connect(self.db_name) as conn:
+            conn.execute("PRAGMA journal_mode=WAL")
             cursor = conn.cursor()
-            
+
             # 1. 单品历史表：记录具体的皮肤价格和销量
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS item_history (
@@ -23,7 +24,7 @@ class MarketDB:
                     last_update INTEGER
                 )
             ''')
-            
+
             # 2. 热门系列表：记录板块宏观走势 (对应你新获取的 API)
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS series_history (
@@ -33,6 +34,21 @@ class MarketDB:
                     sell_price_30 REAL,      -- 30日涨跌幅，用于宏观过滤
                     last_update INTEGER
                 )
+            ''')
+
+            # 3. 价格历史表：每次扫描记录带时间戳的价格，用于回测精准查找卖出价
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS price_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    hash_name TEXT NOT NULL,
+                    price REAL NOT NULL,
+                    sales INTEGER DEFAULT 0,
+                    recorded_at INTEGER NOT NULL
+                )
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_price_history_lookup
+                ON price_history(hash_name, recorded_at)
             ''')
 
             cursor.execute('''
@@ -113,7 +129,8 @@ class MarketDB:
     # --- 单品数据操作 ---
 
     def save_item_snapshot(self, name, price, sales, series_id=None):
-        """保存单品快照点"""
+        """保存单品快照点，同时写入价格历史表"""
+        now_ts = int(time.time())
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT price_series, sales_series, series_id FROM item_history WHERE hash_name = ?", (name,))
@@ -140,10 +157,25 @@ class MarketDB:
             if len(sales_list) > 60: sales_list.pop(0)
 
             cursor.execute('''
-                INSERT OR REPLACE INTO item_history 
+                INSERT OR REPLACE INTO item_history
                 (hash_name, series_id, price_series, sales_series, last_update)
                 VALUES (?, ?, ?, ?, ?)
-            ''', (name, effective_series_id, json.dumps(prices), json.dumps(sales_list), int(time.time())))
+            ''', (name, effective_series_id, json.dumps(prices), json.dumps(sales_list), now_ts))
+
+            # 同步写入带时间戳的价格历史表（保留 240 条 ≈ 200 小时）
+            cursor.execute('''
+                INSERT INTO price_history (hash_name, price, sales, recorded_at)
+                VALUES (?, ?, ?, ?)
+            ''', (name, float(price), int(sales), now_ts))
+
+            # 每个商品最多保留 240 条历史（覆盖 7 天锁仓期的回测需求）
+            cursor.execute('''
+                DELETE FROM price_history WHERE id NOT IN (
+                    SELECT id FROM price_history WHERE hash_name = ?
+                    ORDER BY recorded_at DESC LIMIT 240
+                ) AND hash_name = ?
+            ''', (name, name))
+
             conn.commit()
 
     # --- 热门系列数据操作 ---
@@ -181,6 +213,82 @@ class MarketDB:
                     "series_name": row[3]
                 }
             return None
+
+    def get_price_near_time(self, name, target_ts, window_seconds=3600):
+        """获取 target_ts 附近最近的价格记录。
+        先在 [target_ts, target_ts + window_seconds] 查找，
+        找不到则扩大到整个历史中的最新一条。
+        Returns: (price, actual_ts) or (None, None)
+        """
+        with sqlite3.connect(self.db_name) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT price, recorded_at FROM price_history
+                WHERE hash_name = ?
+                  AND recorded_at BETWEEN ? AND ?
+                ORDER BY recorded_at ASC
+                LIMIT 1
+            ''', (name, target_ts, target_ts + window_seconds))
+            row = cursor.fetchone()
+            if row:
+                return float(row["price"]), int(row["recorded_at"])
+
+            # 扩大范围：找 target_ts 之后最近的一条
+            cursor.execute('''
+                SELECT price, recorded_at FROM price_history
+                WHERE hash_name = ? AND recorded_at >= ?
+                ORDER BY recorded_at ASC LIMIT 1
+            ''', (name, target_ts))
+            row = cursor.fetchone()
+            if row:
+                return float(row["price"]), int(row["recorded_at"])
+
+            # 最后的兜底：该商品的最新一条历史
+            cursor.execute('''
+                SELECT price, recorded_at FROM price_history
+                WHERE hash_name = ?
+                ORDER BY recorded_at DESC LIMIT 1
+            ''', (name,))
+            row = cursor.fetchone()
+            if row:
+                return float(row["price"]), int(row["recorded_at"])
+
+            return None, None
+
+    def get_price_series_in_range(self, name, start_ts, end_ts):
+        """获取 [start_ts, end_ts] 区间内的价格快照，按时间升序。
+        Returns: [(timestamp, price), ...]
+        """
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT recorded_at, price FROM price_history
+                WHERE hash_name = ? AND recorded_at BETWEEN ? AND ?
+                ORDER BY recorded_at ASC
+            ''', (name, start_ts, end_ts))
+            return [(int(row[0]), float(row[1])) for row in cursor.fetchall()]
+
+    def get_recent_backtest_history(self, days=5):
+        """获取最近 N 天的回测结果记录（用于趋势对比）。
+        从 backtest_history 表读取（如有），否则返回空列表。
+        """
+        with sqlite3.connect(self.db_name) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            # 检查表是否存在
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='backtest_history'")
+            if not cursor.fetchone():
+                return []
+            cursor.execute('''
+                SELECT backtest_date, total_return, win_rate, total_trades,
+                       total_profit, sharpe_ratio, max_drawdown
+                FROM backtest_history
+                ORDER BY backtest_date DESC
+                LIMIT ?
+            ''', (days,))
+            rows = cursor.fetchall()
+            return [dict(r) for r in reversed(rows)]  # 按时间升序
 
     def record_signal_event(self, signal_data):
         with sqlite3.connect(self.db_name) as conn:
