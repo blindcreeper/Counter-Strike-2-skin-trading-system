@@ -11,7 +11,17 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "scripts"))
-from analyze_signal_factors import analyze_signal_factors
+
+# Deferred import — only needed for run_full_backtest, not at module level.
+analyze_signal_factors = None
+
+
+def _get_analyze_signal_factors():
+    global analyze_signal_factors
+    if analyze_signal_factors is None:
+        from analyze_signal_factors import analyze_signal_factors as _asf
+        analyze_signal_factors = _asf
+    return analyze_signal_factors
 
 
 class BacktestScheduler:
@@ -180,7 +190,8 @@ class BacktestRunner:
 
             # 8. 发送钉钉通知
             if enable_dingtalk and dingtalk_webhook:
-                factor_report = analyze_signal_factors(days=max(7, int(hours_back / 24)))
+                asf = _get_analyze_signal_factors()
+                factor_report = asf(days=max(7, int(hours_back / 24))) if asf else None
                 self.notifier.send_dingtalk(
                     dingtalk_webhook,
                     metrics,
