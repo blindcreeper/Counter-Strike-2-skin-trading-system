@@ -30,44 +30,18 @@ class StatusHandler(BaseHTTPRequestHandler):
             self._serve_positions()
         elif self.path == "/trades":
             self._serve_trades()
-        elif self.path == "/backtest" or self.path.startswith("/backtest"):
-            self._serve_backtest()
         else:
             snap = self.stats.get_snapshot() if self.stats else {"status": "no_stats"}
             self._json(snap)
-
-    def _serve_backtest(self):
-        """Serve the latest HTML backtest report."""
-        import os
-        # Look in shared_data first (Docker shared volume), fall back to output/
-        src_dir = os.path.dirname(os.path.abspath(__file__))
-        for report_dir in [
-            os.path.join(src_dir, "..", "shared_data", "backtest_reports"),
-            os.path.join(src_dir, "..", "output", "backtest_reports"),
-        ]:
-            latest = os.path.join(os.path.abspath(report_dir), "latest.html")
-            if os.path.exists(latest):
-                break
-        if not os.path.exists(latest):
-            self._html("<h1 style='color:#94a3b8;text-align:center;margin-top:100px'>暂无回测报告</h1><p style='text-align:center;color:#475569'>运行回测后将自动生成</p>", 404)
-            return
-        try:
-            with open(latest, "r", encoding="utf-8") as f:
-                body = f.read()
-            self._html(body, 200)
-        except Exception as e:
-            self._html(f"<h1>读取报告失败</h1><pre>{e}</pre>", 500)
 
     def _serve_positions(self):
         if not self.db:
             self._json({"error": "db not configured"}, 500)
             return
-        import time, sqlite3 as sq3, os, sys
-        sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-        from config import CONFIG
+        import time, sqlite3 as sq3
         now_ts = int(time.time())
-        fee_rate = float(CONFIG.get("PLATFORM_FEE_RATE", CONFIG.get("FEE_RATE", 0.025)))
-        initial_balance = float(CONFIG.get("INITIAL_BALANCE", 10000.0))
+        fee_rate = 0.025
+        initial_balance = 10000.0
 
         conn = sq3.connect(self.db.db_name)
         cursor = conn.cursor()
@@ -154,14 +128,6 @@ class StatusHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
-
-    def _html(self, body, code=200):
-        data = body.encode("utf-8") if isinstance(body, str) else body
-        self.send_response(code)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
 
     def log_message(self, format, *args):
         pass  # suppress access logs
