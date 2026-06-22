@@ -67,9 +67,8 @@ class ExecutionEngine:
         return self.db.get_open_position(name)
 
     def maybe_close_position(self, name, current_price, now_ts=None):
-        """Check take-profit/stop-loss/timeout. Records signal but does not
-        actually close during the 7-day lock period — that is handled by
-        check_all_positions which runs at end of each scan round."""
+        """Check take-profit/stop-loss/timeout. 锁仓期内（< MIN_HOLDING_HOURS）
+        不触发止盈/止损，必须持有至少 72h。超时平仓不受此限制。"""
         position = self.db.get_open_position(name)
         if not position:
             return None
@@ -77,12 +76,20 @@ class ExecutionEngine:
         now_ts = int(now_ts or time.time())
         entry_price = float(position["entry_price"])
         holding_hours = (now_ts - int(position["entry_time"])) / 3600
-        gross_return = (float(current_price) - entry_price) / entry_price if entry_price > 0 else 0
-        net_return = gross_return - (2 * self.fee_rate)
+        cost = entry_price * (1 + self.fee_rate)
+        revenue = float(current_price) * (1 - self.fee_rate)
+        net_return = (revenue - cost) / cost if cost > 0 else 0
 
+        min_hours = int(self.config.get("MIN_HOLDING_HOURS", 72))
         max_hours = int(position.get("max_holding_hours") or self.max_holding_hours)
+
         if holding_hours >= max_hours:
             return self._close_position(position, current_price, now_ts, "timeout_sell")
+
+        # 锁仓期内：只盯市不卖出
+        if holding_hours < min_hours:
+            self.mark_position(name, current_price, note="locked")
+            return None
 
         if net_return >= float(position.get("take_profit_rate") or self.take_profit_rate):
             return self._close_position(position, current_price, now_ts, "take_profit")
@@ -115,8 +122,9 @@ class ExecutionEngine:
 
             entry_price = float(pos["entry_price"])
             holding_hours = (now_ts - int(pos["entry_time"])) / 3600
-            gross_return = (current_price - entry_price) / entry_price if entry_price > 0 else 0
-            net_return = gross_return - (2 * self.fee_rate)
+            cost = entry_price * (1 + self.fee_rate)
+            revenue = current_price * (1 - self.fee_rate)
+            net_return = (revenue - cost) / cost if cost > 0 else 0
 
             # Update last price
             self.mark_position(name, current_price, note=f"holding_return={net_return:.2%}")
@@ -139,8 +147,9 @@ class ExecutionEngine:
         """Close a position and record the execution."""
         name = position["hash_name"]
         entry_price = float(position["entry_price"])
-        gross_return = (float(current_price) - entry_price) / entry_price if entry_price > 0 else 0
-        net_return = gross_return - (2 * self.fee_rate)
+        cost = entry_price * (1 + self.fee_rate)
+        revenue = float(current_price) * (1 - self.fee_rate)
+        net_return = (revenue - cost) / cost if cost > 0 else 0
         fee_amount = float(current_price) * self.fee_rate
         net_amount = float(current_price) * (1 - self.fee_rate)
 

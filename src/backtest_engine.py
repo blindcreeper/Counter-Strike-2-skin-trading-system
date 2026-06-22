@@ -278,8 +278,9 @@ class BacktestEngine:
                 if check_dt < unlock_dt:
                     continue
 
-                gross_return = (price - buy_price) / buy_price
-                net_return = gross_return - 2 * fee_rate
+                cost = buy_price * (1 + fee_rate)
+                revenue = price * (1 - fee_rate)
+                net_return = (revenue - cost) / cost if cost > 0 else 0
 
                 if net_return >= take_profit_rate:
                     return (price, check_dt, "take_profit",
